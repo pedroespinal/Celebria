@@ -24,7 +24,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.0.2"
+APP_VERSION = "1.0.3"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -517,6 +517,16 @@ _HELP_ES = [
      "El idioma cambia instantáneamente en toda la app y se recuerda "
      "la próxima vez que la abras.\n\n"
      "Para volver al español, toca ES en la misma posición."),
+    ("\U0001f504", "Actualizaciones automáticas",
+     "Celebria revisa automáticamente si hay una versión nueva cada vez "
+     "que abres la app (requiere conexión a internet).\n\n"
+     "Si hay una actualización disponible, verás este mensaje unos segundos "
+     "después de que carga la pantalla de Inicio:\n\n"
+     "   🎉 ¡Nueva versión disponible!\n"
+     "   Celebria vX.X.X está disponible.\n\n"
+     "Toca ⬇ Descargar para ir directamente a la descarga del APK nuevo.\n"
+     "Toca Ahora no para cerrarlo y actualizar después.\n\n"
+     "Si no ves el mensaje, ya tienes la versión más reciente instalada."),
     ("\U0001f4a1", "Consejos útiles",
      "• Agrega el año de nacimiento para ver la edad exacta que cumple cada persona.\n\n"
      "• El color del borde de cada tarjeta indica la urgencia:\n"
@@ -597,6 +607,16 @@ _HELP_EN = [
      "The language changes instantly throughout the app and is remembered "
      "the next time you open it.\n\n"
      "To switch back to English, tap EN in the same position."),
+    ("\U0001f504", "Automatic updates",
+     "Celebria automatically checks for a new version every time you open "
+     "the app (requires an internet connection).\n\n"
+     "If an update is available, you will see this message a few seconds "
+     "after the Home screen loads:\n\n"
+     "   🎉 Update available!\n"
+     "   Celebria vX.X.X is now available.\n\n"
+     "Tap ⬇ Download to go directly to the new APK download page.\n"
+     "Tap Not now to dismiss it and update later.\n\n"
+     "If no message appears, you already have the latest version installed."),
     ("\U0001f4a1", "Useful tips",
      "• Add the birth year to see the exact age each person is turning.\n\n"
      "• The card border color shows urgency:\n"

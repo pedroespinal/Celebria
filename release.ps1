@@ -1,10 +1,12 @@
 # ============================================================
 #  Celebria - Script de Release
 #  Uso: .\release.ps1 -Version "1.0.1" -Notes "descripcion"
+#  Usa -SkipTest para saltar la prueba local (ej: cambios menores)
 # ============================================================
 param(
     [Parameter(Mandatory=$true)]  [string]$Version,
-    [Parameter(Mandatory=$true)]  [string]$Notes
+    [Parameter(Mandatory=$true)]  [string]$Notes,
+    [switch]$SkipTest
 )
 
 $ErrorActionPreference = "Continue"   # git warnings no deben abortar el script
@@ -44,6 +46,28 @@ $APK   = "C:\Celebria\build\apk\Celebria.apk"
 Write-Host ""
 Write-Host "=== Celebria Release $TAG ===" -ForegroundColor Cyan
 
+# -- 0. Prueba local antes de compilar ----------------------------------------
+if (-not $SkipTest) {
+    Write-Host ""
+    Write-Host "[0/6] Prueba local..." -ForegroundColor Yellow
+    Write-Host "      Abriendo la app en modo escritorio."
+    Write-Host "      Prueba todo lo que necesites y cierra la ventana al terminar."
+    Write-Host ""
+    $env:PYTHONIOENCODING = "utf-8"
+    $env:PYTHONUTF8       = "1"
+    python main.py
+    Write-Host ""
+    $ok = Read-Host "      Todo bien? Continuar con compile y release? (S/N)"
+    if ($ok -ne "S" -and $ok -ne "s") {
+        Write-Host ""
+        Write-Host "  Release cancelado. Corrige lo necesario y vuelve a intentar." -ForegroundColor Red
+        Write-Host ""
+        exit 0
+    }
+} else {
+    Write-Host "      (prueba omitida con -SkipTest)" -ForegroundColor DarkGray
+}
+
 # -- 1. Actualizar APP_VERSION en main.py -------------------------------------
 Write-Host ""
 Write-Host "[1/5] Actualizando APP_VERSION a $Version..."
@@ -55,6 +79,21 @@ if ($content -eq $updated) {
     [System.IO.File]::WriteAllText("$PWD\main.py", $updated, [System.Text.Encoding]::UTF8)
     Write-Host "      OK"
 }
+
+# -- 1.5. Actualizar version.json --------------------------------------------
+Write-Host ""
+Write-Host "[1.5/6] Actualizando version.json..."
+$vjPath = "$PWD\version.json"
+$vjCurrent = Get-Content $vjPath -Raw -Encoding UTF8 | ConvertFrom-Json
+$vjNew = [ordered]@{
+    latest       = $Version
+    minimum      = $vjCurrent.minimum   # se edita manualmente cuando se quiere forzar
+    download_url = "https://github.com/pedroespinal/Celebria/releases/download/$TAG/Celebria-$TAG.apk"
+}
+[System.IO.File]::WriteAllText($vjPath,
+    ($vjNew | ConvertTo-Json -Compress),
+    [System.Text.Encoding]::UTF8)
+Write-Host "      OK  (minimum=$($vjCurrent.minimum))"
 
 # -- 2. Compilar APK ----------------------------------------------------------
 Write-Host ""
@@ -70,8 +109,8 @@ Write-Host "      OK - $sizeMB MB"
 
 # -- 3. Commit y tag en git ---------------------------------------------------
 Write-Host ""
-Write-Host "[3/5] Commit y tag git..."
-git add main.py *>&1 | Out-Null
+Write-Host "[3/6] Commit y tag git..."
+git add main.py version.json *>&1 | Out-Null
 git commit -m "Celebria $TAG - $Notes" *>&1 | Out-Null
 git tag $TAG *>&1 | Out-Null
 git push origin main --tags *>&1 | Out-Null
@@ -79,7 +118,7 @@ Write-Host "      OK - commit + tag $TAG pusheados"
 
 # -- 4. Crear release en GitHub -----------------------------------------------
 Write-Host ""
-Write-Host "[4/5] Creando release en GitHub..."
+Write-Host "[4/6] Creando release en GitHub..."
 $bodyObj = @{
     tag_name         = $TAG
     target_commitish = "main"
@@ -106,7 +145,7 @@ try {
 
 # -- 5. Subir APK -------------------------------------------------------------
 Write-Host ""
-Write-Host "[5/5] Subiendo APK ($sizeMB MB) a GitHub..."
+Write-Host "[5/6] Subiendo APK ($sizeMB MB) a GitHub..."
 $uploadUrl = "https://uploads.github.com/repos/$REPO/releases/$($rel.id)/assets?name=Celebria-$TAG.apk"
 $apkBytes  = [System.IO.File]::ReadAllBytes($APK)
 $assetResp = Invoke-WebRequest -Uri $uploadUrl -Method POST -Headers $HDRS `
@@ -115,10 +154,17 @@ $assetResp = Invoke-WebRequest -Uri $uploadUrl -Method POST -Headers $HDRS `
 $asset = $assetResp.Content | ConvertFrom-Json
 Write-Host "      OK"
 
+# -- 6. Resumen ---------------------------------------------------------------
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Green
 Write-Host " Release publicado exitosamente!" -ForegroundColor Green
 Write-Host " Release : $($rel.html_url)" -ForegroundColor Green
 Write-Host " APK     : $($asset.browser_download_url)" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Green
+Write-Host ""
+Write-Host "version.json actual:" -ForegroundColor Cyan
+Get-Content "$PWD\version.json" | Write-Host
+Write-Host ""
+Write-Host "Para forzar actualizacion: edita version.json en GitHub y cambia" -ForegroundColor Yellow
+Write-Host "  minimum a la version actual ($TAG) y haz push." -ForegroundColor Yellow
 Write-Host ""

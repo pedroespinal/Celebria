@@ -24,7 +24,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.0.6"
+APP_VERSION = "1.0.7"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -1353,10 +1353,7 @@ def main(page: ft.Page):
         page.navigation_bar = None
 
         def on_whatsapp(e):
-            # Dejar solo dígitos (quitar +, espacios, guiones, paréntesis)
-            digits = "".join(ch for ch in phone if ch.isdigit())
-            # whatsapp:// abre la app directamente sin pasar por el browser
-            page.launch_url(f"whatsapp://send?phone={digits}")
+            pass  # manejado por url= en el Container
 
         if LANG[0] == "es":
             ds = f"{day} de {month_name(month)}"
@@ -1423,9 +1420,24 @@ def main(page: ft.Page):
             *info_items,
         ]
         if phone:
+            wa_digits = "".join(ch for ch in phone if ch.isdigit())
             items.append(
-                _btn(f"\U0001f4ac  {t('btn_whatsapp')}", C["green"],
-                     on_click=on_whatsapp, expand=True)
+                ft.Container(
+                    content=ft.Text(
+                        f"\U0001f4ac  {t('btn_whatsapp')}",
+                        color="#ffffff",
+                        size=13,
+                        weight=ft.FontWeight.W_600,
+                        text_align=ft.TextAlign.CENTER,
+                    ),
+                    bgcolor=C["green"],
+                    border_radius=10,
+                    padding=ft.Padding(left=14, top=10, right=14, bottom=10),
+                    url=f"https://wa.me/{wa_digits}",
+                    ink=True,
+                    expand=True,
+                    alignment=ft.Alignment.CENTER,
+                )
             )
         items += [_footer(), ft.Container(height=16)]
 

@@ -24,7 +24,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.0.5"
+APP_VERSION = "1.0.6"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -503,7 +503,9 @@ _HELP_ES = [
      "2. Toca WhatsApp.\n"
      "3. WhatsApp se abrirá directamente en esa conversación.\n\n"
      "Perfecto para enviar un mensaje de felicitación en segundos \U0001f389\n\n"
-     "Formato recomendado para el teléfono: +18095551234"),
+     "Formato recomendado: incluye el código de país sin el +\n"
+     "  República Dominicana: 18095551234\n"
+     "  Estados Unidos:       12125551234"),
     ("\U0001f4e4", "Exportar e importar contactos",
      "Ve a Configuración → Respaldo de Datos:\n\n"
      "Exportar JSON: guarda todos tus contactos en Celebria_backup.json "
@@ -594,7 +596,9 @@ _HELP_EN = [
      "2. Tap WhatsApp.\n"
      "3. WhatsApp will open directly in that conversation.\n\n"
      "Perfect for sending a quick birthday message in seconds \U0001f389\n\n"
-     "Recommended phone format: +18095551234"),
+     "Recommended format: include the country code without the +\n"
+     "  Dominican Republic: 18095551234\n"
+     "  United States:      12125551234"),
     ("\U0001f4e4", "Exporting and importing contacts",
      "Go to Settings → Data Backup:\n\n"
      "Export JSON: saves all your contacts to Celebria_backup.json "
@@ -1349,8 +1353,10 @@ def main(page: ft.Page):
         page.navigation_bar = None
 
         def on_whatsapp(e):
-            clean = "".join(ch for ch in phone if ch.isdigit() or ch == "+")
-            page.launch_url(f"https://wa.me/{clean}")
+            # Dejar solo dígitos (quitar +, espacios, guiones, paréntesis)
+            digits = "".join(ch for ch in phone if ch.isdigit())
+            # whatsapp:// abre la app directamente sin pasar por el browser
+            page.launch_url(f"whatsapp://send?phone={digits}")
 
         if LANG[0] == "es":
             ds = f"{day} de {month_name(month)}"

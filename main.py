@@ -24,7 +24,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.0.3"
+APP_VERSION = "1.0.4"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -1894,7 +1894,15 @@ def main(page: ft.Page):
                     data = _json.loads(resp.read())
 
                 tag    = data.get("tag_name", "")
-                dl_url = data.get("html_url",
+                # Buscar el APK directo en los assets del release
+                assets  = data.get("assets", [])
+                apk_url = next(
+                    (a.get("browser_download_url", "")
+                     for a in assets
+                     if a.get("name", "").lower().endswith(".apk")),
+                    None
+                )
+                dl_url = apk_url or data.get("html_url",
                          f"https://github.com/{GITHUB_REPO}/releases/latest")
 
                 if _ver_tuple(tag) > _ver_tuple(APP_VERSION):

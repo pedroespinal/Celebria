@@ -7,7 +7,7 @@ param(
     [Parameter(Mandatory=$true)]  [string]$Notes
 )
 
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Continue"   # git warnings no deben abortar el script
 Set-Location "C:\Celebria"
 
 # -- 0. Leer credencial de GitHub ---------------------------------------------
@@ -71,10 +71,10 @@ Write-Host "      OK - $sizeMB MB"
 # -- 3. Commit y tag en git ---------------------------------------------------
 Write-Host ""
 Write-Host "[3/5] Commit y tag git..."
-git add main.py 2>&1 | Out-Null
-git commit -m "Celebria $TAG - $Notes" 2>&1 | Out-Null
-git tag $TAG 2>&1 | Out-Null
-git push origin main --tags 2>&1 | Out-Null
+git add main.py *>&1 | Out-Null
+git commit -m "Celebria $TAG - $Notes" *>&1 | Out-Null
+git tag $TAG *>&1 | Out-Null
+git push origin main --tags *>&1 | Out-Null
 Write-Host "      OK - commit + tag $TAG pusheados"
 
 # -- 4. Crear release en GitHub -----------------------------------------------

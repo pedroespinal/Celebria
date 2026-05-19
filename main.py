@@ -24,7 +24,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.0.4"
+APP_VERSION = "1.0.5"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -1841,17 +1841,29 @@ def main(page: ft.Page):
             except Exception:
                 return (0,)
 
-        def _show_update_dialog(new_ver, dl_url):
+        def _show_update_dialog(new_ver, dl_url, forced=False):
             if LANG[0] == "es":
-                title_txt = "¡Nueva versión disponible!"
-                body_txt  = (f"Celebria v{new_ver} ya está disponible.\n"
-                             f"Tienes instalada la v{APP_VERSION}.")
+                title_txt = ("\U0001f512  ¡Actualización requerida!"
+                             if forced else "\U0001f389  ¡Nueva versión disponible!")
+                body_txt  = (
+                    f"Esta versión (v{APP_VERSION}) ya no es compatible.\n"
+                    f"Debes actualizar a v{new_ver} para continuar usando Celebria."
+                    if forced else
+                    f"Celebria v{new_ver} ya está disponible.\n"
+                    f"Tienes instalada la v{APP_VERSION}."
+                )
                 btn_later = "Ahora no"
                 btn_dl    = "⬇  Descargar"
             else:
-                title_txt = "Update available!"
-                body_txt  = (f"Celebria v{new_ver} is now available.\n"
-                             f"You have v{APP_VERSION} installed.")
+                title_txt = ("\U0001f512  Update required!"
+                             if forced else "\U0001f389  Update available!")
+                body_txt  = (
+                    f"Version v{APP_VERSION} is no longer supported.\n"
+                    f"You must update to v{new_ver} to keep using Celebria."
+                    if forced else
+                    f"Celebria v{new_ver} is now available.\n"
+                    f"You have v{APP_VERSION} installed."
+                )
                 btn_later = "Not now"
                 btn_dl    = "⬇  Download"
 
@@ -1859,56 +1871,57 @@ def main(page: ft.Page):
                 page.pop_dialog()
                 page.launch_url(dl_url)
 
+            actions = []
+            if not forced:
+                actions.append(ft.TextButton(
+                    btn_later,
+                    on_click=lambda e: page.pop_dialog(),
+                    style=ft.ButtonStyle(color=C["t3"]),
+                ))
+            actions.append(ft.TextButton(
+                btn_dl,
+                on_click=_do_download,
+                style=ft.ButtonStyle(
+                    color=C["red"] if forced else C["cyan"]
+                ),
+            ))
+
             dlg = ft.AlertDialog(
                 modal=True,
                 bgcolor=C["bg2"],
                 title=ft.Text(
-                    f"\U0001f389  {title_txt}",
-                    color=C["cyan"], weight=ft.FontWeight.BOLD, size=16,
+                    title_txt,
+                    color=C["red"] if forced else C["cyan"],
+                    weight=ft.FontWeight.BOLD, size=16,
                 ),
                 content=ft.Text(body_txt, color=C["t1"], size=13),
-                actions=[
-                    ft.TextButton(
-                        btn_later,
-                        on_click=lambda e: page.pop_dialog(),
-                        style=ft.ButtonStyle(color=C["t3"]),
-                    ),
-                    ft.TextButton(
-                        btn_dl,
-                        on_click=_do_download,
-                        style=ft.ButtonStyle(color=C["cyan"]),
-                    ),
-                ],
+                actions=actions,
                 actions_alignment=ft.MainAxisAlignment.END,
             )
             page.show_dialog(dlg)
 
         def _run():
             try:
-                url = (f"https://api.github.com/repos/"
-                       f"{GITHUB_REPO}/releases/latest")
+                # version.json en el repo — fuente única de verdad
+                url = (f"https://raw.githubusercontent.com/"
+                       f"{GITHUB_REPO}/main/version.json")
                 req = urllib.request.Request(
                     url, headers={"User-Agent": "Celebria-App"}
                 )
                 with urllib.request.urlopen(req, timeout=6) as resp:
                     data = _json.loads(resp.read())
 
-                tag    = data.get("tag_name", "")
-                # Buscar el APK directo en los assets del release
-                assets  = data.get("assets", [])
-                apk_url = next(
-                    (a.get("browser_download_url", "")
-                     for a in assets
-                     if a.get("name", "").lower().endswith(".apk")),
-                    None
-                )
-                dl_url = apk_url or data.get("html_url",
-                         f"https://github.com/{GITHUB_REPO}/releases/latest")
+                latest  = data.get("latest",  "")
+                minimum = data.get("minimum", "0.0.0")
+                dl_url  = data.get("download_url",
+                          f"https://github.com/{GITHUB_REPO}/releases/latest")
 
-                if _ver_tuple(tag) > _ver_tuple(APP_VERSION):
-                    _show_update_dialog(tag.lstrip("v"), dl_url)
+                cur = _ver_tuple(APP_VERSION)
+                if _ver_tuple(latest) > cur:
+                    forced = _ver_tuple(minimum) > cur
+                    _show_update_dialog(latest, dl_url, forced=forced)
             except Exception:
-                pass  # sin conexión o repo inexistente → silencioso
+                pass  # sin conexión → silencioso
 
         threading.Thread(target=_run, daemon=True).start()
 

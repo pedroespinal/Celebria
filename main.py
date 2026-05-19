@@ -24,14 +24,14 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.0.1"
+APP_VERSION = "1.0.2"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
 COPYRIGHT   = f"Creado por: {APP_AUTHOR}   ·   {APP_RIGHTS}   ©{APP_YEAR}"
 
 # ── GitHub — pon aquí tu usuario/nombre-del-repo ──────────────────────────────
-GITHUB_REPO = "pedroespinal/celebria"   # ← actualizar cuando crees el repo
+GITHUB_REPO = "pedroespinal/Celebria"
 
 # ── Palette ───────────────────────────────────────────────────────────────────
 _DARK = {

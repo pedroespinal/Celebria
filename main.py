@@ -24,7 +24,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.0.7"
+APP_VERSION = "1.0.8"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -1885,9 +1885,7 @@ def main(page: ft.Page):
                 btn_later = "Not now"
                 btn_dl    = "⬇  Download"
 
-            def _do_download(e):
-                page.pop_dialog()
-                page.launch_url(dl_url)
+            dl_color = C["red"] if forced else C["cyan"]
 
             actions = []
             if not forced:
@@ -1896,12 +1894,18 @@ def main(page: ft.Page):
                     on_click=lambda e: page.pop_dialog(),
                     style=ft.ButtonStyle(color=C["t3"]),
                 ))
-            actions.append(ft.TextButton(
-                btn_dl,
-                on_click=_do_download,
-                style=ft.ButtonStyle(
-                    color=C["red"] if forced else C["cyan"]
+            # url= en Container: mismo mecanismo que funciona en el botón WhatsApp
+            actions.append(ft.Container(
+                content=ft.Text(
+                    btn_dl,
+                    color=dl_color,
+                    size=13,
+                    weight=ft.FontWeight.W_600,
                 ),
+                padding=ft.Padding(left=8, top=8, right=8, bottom=8),
+                url=dl_url,
+                on_click=lambda e: page.pop_dialog(),
+                ink=True,
             ))
 
             dlg = ft.AlertDialog(

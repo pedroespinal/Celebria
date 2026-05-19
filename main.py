@@ -24,7 +24,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.0.8"
+APP_VERSION = "1.0.9"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -1887,6 +1887,13 @@ def main(page: ft.Page):
 
             dl_color = C["red"] if forced else C["cyan"]
 
+            def _do_download(e):
+                # Cerrar el diálogo primero, luego lanzar URL
+                # El AlertDialog bloquea gestos externos mientras está abierto
+                page.pop_dialog()
+                import threading
+                threading.Timer(0.4, lambda: page.launch_url(dl_url)).start()
+
             actions = []
             if not forced:
                 actions.append(ft.TextButton(
@@ -1894,18 +1901,10 @@ def main(page: ft.Page):
                     on_click=lambda e: page.pop_dialog(),
                     style=ft.ButtonStyle(color=C["t3"]),
                 ))
-            # url= en Container: mismo mecanismo que funciona en el botón WhatsApp
-            actions.append(ft.Container(
-                content=ft.Text(
-                    btn_dl,
-                    color=dl_color,
-                    size=13,
-                    weight=ft.FontWeight.W_600,
-                ),
-                padding=ft.Padding(left=8, top=8, right=8, bottom=8),
-                url=dl_url,
-                on_click=lambda e: page.pop_dialog(),
-                ink=True,
+            actions.append(ft.TextButton(
+                btn_dl,
+                on_click=_do_download,
+                style=ft.ButtonStyle(color=dl_color),
             ))
 
             dlg = ft.AlertDialog(

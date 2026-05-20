@@ -24,7 +24,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.2.5"
+APP_VERSION = "1.2.6"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -1196,16 +1196,11 @@ def main(page: ft.Page):
             bgcolor=C["bg2"],
         ))
 
-    def _backup_path(filename):
-        path = os.path.join(os.path.expanduser("~"), filename)
-        try:
-            from android.storage import primary_external_storage_path  # type: ignore
-            path = os.path.join(
-                primary_external_storage_path(), "Download", filename
-            )
-        except Exception:
-            pass
-        return path
+    def _desktop_backup_path(filename):
+        """Ruta para backup en desktop (~/.celebria/filename)."""
+        p = Path.home() / ".celebria"
+        p.mkdir(parents=True, exist_ok=True)
+        return str(p / filename)
 
     # ── Master render ─────────────────────────────────────────────────────
     # FIX: reset appbar/navbar first; wrap in try/except to show errors on screen
@@ -1464,16 +1459,33 @@ def main(page: ft.Page):
             files = await img_picker.pick_files(
                 file_type=ft.FilePickerFileType.IMAGE,
                 allow_multiple=False,
+                with_data=True,   # bytes es más confiable que path en Android
             )
-            if files:
-                try:
-                    stored = _copy_photo(files[0].path)
-                    state["photo"] = stored
-                    _photo_ctrl[0] = _avatar(stored, tf_name.value or "?",
-                                             state.get("rel", "friend"), size=70)
-                    _refresh_photo_display()
-                except Exception as ex:
-                    _toast(f"Error: {ex}")
+            if not files:
+                return
+            try:
+                import time as _time
+                f = files[0]
+                photos_dir = Path(DB_PATH).parent / "photos"
+                photos_dir.mkdir(parents=True, exist_ok=True)
+                ext = Path(f.name).suffix.lower() if f.name else ".jpg"
+                dest = str(photos_dir / f"p_{int(_time.time()*1000)}{ext or '.jpg'}")
+                if f.bytes:
+                    # Guardar bytes directamente (siempre disponible en Android)
+                    with open(dest, "wb") as fh:
+                        fh.write(f.bytes)
+                elif f.path:
+                    import shutil as _shutil
+                    _shutil.copy2(f.path, dest)
+                else:
+                    _toast("Error: no se pudo leer la imagen")
+                    return
+                state["photo"] = dest
+                _photo_ctrl[0] = _avatar(dest, tf_name.value or "?",
+                                         state.get("rel", "friend"), size=70)
+                _refresh_photo_display()
+            except Exception as ex:
+                _toast(f"Error: {ex}")
 
         def remove_photo(e):
             state["photo"] = ""
@@ -2100,13 +2112,20 @@ def main(page: ft.Page):
         files = await vcf_picker.pick_files(
             allowed_extensions=["vcf"],
             dialog_title=t("import_vcf_title"),
+            with_data=True,   # bytes es más confiable que path en Android
         )
         if not files:
             return
         try:
-            file_path = files[0].path
-            with open(file_path, "r", encoding="utf-8", errors="replace") as fh:
-                content = fh.read()
+            f = files[0]
+            if f.bytes:
+                content = f.bytes.decode("utf-8", errors="replace")
+            elif f.path:
+                with open(f.path, "r", encoding="utf-8", errors="replace") as fh:
+                    content = fh.read()
+            else:
+                _toast("Error: no se pudo leer el archivo")
+                return
             contacts = _parse_vcf(content)
             if not contacts:
                 _toast(t("import_vcf_none"))
@@ -2150,30 +2169,65 @@ def main(page: ft.Page):
             db.set(key, new_val)
             render()
 
-        def do_export(e):
-            path = _backup_path("Celebria_backup.json")
-            try:
-                with open(path, "w", encoding="utf-8") as f:
-                    f.write(db.to_json())
-                _toast(f"{t('export_ok')}: {path}")
-            except Exception as ex:
-                _toast(f"Error: {ex}")
+        async def do_export(e):
+            json_bytes = db.to_json().encode("utf-8")
+            if _is_android:
+                # Android: save_file() muestra diálogo "Guardar como" del sistema
+                try:
+                    await save_picker.save_file(
+                        file_name="Celebria_backup.json",
+                        src_bytes=json_bytes,
+                    )
+                    _toast(f"✓  {t('export_ok')}")
+                except Exception as ex:
+                    _toast(f"Error: {ex}")
+            else:
+                path = _desktop_backup_path("Celebria_backup.json")
+                try:
+                    with open(path, "w", encoding="utf-8") as f:
+                        f.write(db.to_json())
+                    _toast(f"✓  {t('export_ok')}: {path}")
+                except Exception as ex:
+                    _toast(f"Error: {ex}")
 
-        def do_import(e):
-            path = _backup_path("Celebria_backup.json")
-            try:
-                with open(path, "r", encoding="utf-8") as f:
-                    txt = f.read()
-                n = db.from_json(txt)
-                if n >= 0:
-                    _toast(f"✓  {n} {t('import_ok')}")
-                    render()
-                else:
-                    _toast("Error en el archivo / File error")
-            except FileNotFoundError:
-                _toast(f"{t('file_not_found')}: {path}")
-            except Exception as ex:
-                _toast(f"Error: {ex}")
+        async def do_import(e):
+            if _is_android:
+                # Android: pick_files() deja al usuario elegir el JSON
+                files = await vcf_picker.pick_files(
+                    allowed_extensions=["json"],
+                    allow_multiple=False,
+                    with_data=True,
+                )
+                if not files:
+                    return
+                try:
+                    f = files[0]
+                    txt = (f.bytes.decode("utf-8")
+                           if f.bytes
+                           else open(f.path, encoding="utf-8").read())
+                    n = db.from_json(txt)
+                    if n >= 0:
+                        _toast(f"✓  {n} {t('import_ok')}")
+                        render()
+                    else:
+                        _toast("Error en el archivo / File error")
+                except Exception as ex:
+                    _toast(f"Error: {ex}")
+            else:
+                path = _desktop_backup_path("Celebria_backup.json")
+                try:
+                    with open(path, "r", encoding="utf-8") as f:
+                        txt = f.read()
+                    n = db.from_json(txt)
+                    if n >= 0:
+                        _toast(f"✓  {n} {t('import_ok')}")
+                        render()
+                    else:
+                        _toast("Error en el archivo / File error")
+                except FileNotFoundError:
+                    _toast(f"{t('file_not_found')}: {path}")
+                except Exception as ex:
+                    _toast(f"Error: {ex}")
 
         items = [
             # ── Theme ────────────────────────────────────────────────────
@@ -2410,17 +2464,17 @@ def main(page: ft.Page):
         _play_birthday_sound()
         page.show_dialog(dlg)
 
-    # ── File pickers ──────────────────────────────────────────────────────
-    # FilePicker genera "Unknown control" en AMBAS plataformas si se agrega
-    # directamente al overlay. Solución: Container(visible=False) → Flutter
-    # lo renderiza como Offstage → sin barra roja, pero el picker sigue
-    # funcional porque pick_files() usa method channels (no depende del render).
-    # Lo mismo que hace flet_audio con el control Audio.
+    # ── Platform + File pickers ───────────────────────────────────────────
+    # pick_files() / save_file() son async y requieren el picker en overlay.
+    # Usar 3 instancias separadas para evitar colisiones de estado:
+    #   vcf_picker  → importar .vcf e importar .json
+    #   img_picker  → seleccionar foto de contacto
+    #   save_picker → exportar JSON con save_file()
     _is_android = (page.platform == ft.PagePlatform.ANDROID)
-    vcf_picker = ft.FilePicker()
-    img_picker = ft.FilePicker()
-    page.overlay.append(ft.Container(content=vcf_picker, visible=False))
-    page.overlay.append(ft.Container(content=img_picker, visible=False))
+    vcf_picker  = ft.FilePicker()
+    img_picker  = ft.FilePicker()
+    save_picker = ft.FilePicker()
+    page.overlay.extend([vcf_picker, img_picker, save_picker])
 
     # ── Initial render ────────────────────────────────────────────────────
     render()

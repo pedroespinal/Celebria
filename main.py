@@ -24,7 +24,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.2.7"
+APP_VERSION = "1.2.8"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -2172,13 +2172,15 @@ def main(page: ft.Page):
         async def do_export(e):
             json_bytes = db.to_json().encode("utf-8")
             if _is_android:
-                # Android: save_file() muestra diálogo "Guardar como" del sistema
+                # Android: save_file() muestra diálogo "Guardar como" del sistema.
+                # Retorna la ruta elegida, o None si el usuario cancela.
                 try:
-                    await save_picker.save_file(
+                    result = await save_picker.save_file(
                         file_name="Celebria_backup.json",
                         src_bytes=json_bytes,
                     )
-                    _toast(f"✓  {t('export_ok')}")
+                    if result is not None:
+                        _toast(f"✓  {t('export_ok')}")
                 except Exception as ex:
                     _toast(f"Error: {ex}")
             else:
@@ -2464,25 +2466,38 @@ def main(page: ft.Page):
         _play_birthday_sound()
         page.show_dialog(dlg)
 
-    # ── Platform + File pickers ───────────────────────────────────────────
-    # pick_files() / save_file() son async y requieren el picker en overlay.
-    # ── File pickers ─────────────────────────────────────────────────────
-    # page._services.register_service() registra los pickers en el
-    # ServiceRegistry interno de Flet (NO en page.overlay).
-    # Esto evita el "Unknown control" red bar: Flutter maneja los hijos de
-    # ServiceRegistry como servicios (sin renderizado visual), no como widgets.
-    # La API _invoke_method sigue funcionando porque el control sí tiene
-    # un UID válido y Flutter lo conoce a través del ServiceRegistry.
+    # ── Platform detection + File pickers ────────────────────────────────
+    # Los pickers se declaran ANTES de render() para que los closures los
+    # capturen por nombre, pero se REGISTRAN DESPUÉS de render() para que
+    # la sesión Flet / Flutter esté completamente lista.
+    # Registrar antes de render() puede crashear (pantalla negra).
     _is_android = (page.platform == ft.PagePlatform.ANDROID)
     vcf_picker  = ft.FilePicker()   # importar .vcf e importar .json
     img_picker  = ft.FilePicker()   # seleccionar foto
     save_picker = ft.FilePicker()   # exportar JSON (save_file)
-    page._services.register_service(vcf_picker)
-    page._services.register_service(img_picker)
-    page._services.register_service(save_picker)
 
     # ── Initial render ────────────────────────────────────────────────────
     render()
+
+    # ── Registrar pickers después de render() ────────────────────────────
+    # page._services (ServiceRegistry) evita el "Unknown control" red bar:
+    # Flutter trata sus hijos como servicios (sin rendering visual).
+    # Si falla (AttributeError u otro), fallback a overlay + visible=False
+    # (Flutter Offstage: inicializado pero no pintado → sin barra roja).
+    try:
+        page._services.register_service(vcf_picker)
+        page._services.register_service(img_picker)
+        page._services.register_service(save_picker)
+    except Exception:
+        try:
+            page.overlay.extend([
+                ft.Container(content=vcf_picker,  visible=False),
+                ft.Container(content=img_picker,  visible=False),
+                ft.Container(content=save_picker, visible=False),
+            ])
+            page.update()
+        except Exception:
+            pass
 
     # Birthday popup (respects show_popup setting)
     today_contacts = [c for c in db.all_contacts() if days_until(c[2], c[3]) == 0]

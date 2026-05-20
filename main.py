@@ -24,7 +24,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.4.2"
+APP_VERSION = "1.4.3"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -32,6 +32,26 @@ COPYRIGHT   = f"Creado por: {APP_AUTHOR}   ·   {APP_RIGHTS}   ©{APP_YEAR}"
 
 # ── GitHub — pon aquí tu usuario/nombre-del-repo ──────────────────────────────
 GITHUB_REPO = "pedroespinal/Celebria"
+
+# ── Authorship fingerprint ────────────────────────────────────────────────────
+# Firma de origen inmutable incrustada en cada APK compilado.
+# Prueba criptográfica de autoría desde el primer commit público.
+#
+# Verificar en: https://github.com/pedroespinal/Celebria/commit/3c6b33a139fa16560d458d61ca52e2dae5d6b2c7
+#
+_GENESIS_COMMIT = "3c6b33a139fa16560d458d61ca52e2dae5d6b2c7"   # SHA-1 git — primer commit
+_GENESIS_DATE   = "2026-05-19T17:55:07"                         # Fecha de creación (UTC-4)
+_GENESIS_AUTHOR = "Pedro Espinal"                               # Autor original
+_GENESIS_APP    = "Celebria"                                    # Nombre de la aplicación
+# Sello SHA-256: sha256("<commit>|<date>|<author>|<app>")
+# Si se altera cualquiera de los valores anteriores, este sello NO coincidirá.
+_GENESIS_SEAL   = "61842021809f2b64415f519a874153757cf4a766fee141bd5dd20954aa8d3fc5"
+
+def _verify_genesis() -> bool:
+    """Verifica que la firma de origen no ha sido alterada."""
+    import hashlib
+    data = f"{_GENESIS_COMMIT}|{_GENESIS_DATE}|{_GENESIS_AUTHOR}|{_GENESIS_APP}"
+    return hashlib.sha256(data.encode("utf-8")).hexdigest() == _GENESIS_SEAL
 
 # ── Palette ───────────────────────────────────────────────────────────────────
 _DARK = {

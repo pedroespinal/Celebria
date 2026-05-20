@@ -24,7 +24,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.2.1"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -1188,12 +1188,11 @@ def main(page: ft.Page):
         render()
 
     def _toast(msg):
-        page.snack_bar = ft.SnackBar(
+        # En Flet 0.85.1, SnackBar es DialogControl → page.show_dialog()
+        page.show_dialog(ft.SnackBar(
             content=ft.Text(msg, color=C["t1"]),
             bgcolor=C["bg2"],
-            open=True,
-        )
-        page.update()
+        ))
 
     def _backup_path(filename):
         path = os.path.join(os.path.expanduser("~"), filename)
@@ -1456,8 +1455,8 @@ def main(page: ft.Page):
             alignment=ft.Alignment.CENTER,
         )
 
-        def pick_photo(e):
-            files = img_picker.pick_files(
+        async def pick_photo(e):
+            files = await img_picker.pick_files(
                 file_type=ft.FilePickerFileType.IMAGE,
                 allow_multiple=False,
             )
@@ -2088,8 +2087,12 @@ def main(page: ft.Page):
         )
         page.show_dialog(dlg)
 
-    def _on_vcf_files(files):
-        """Procesa la lista de FilePickerFile devuelta por pick_files()."""
+    async def _do_vcf_import(e):
+        """Abre el selector de archivos .vcf y procesa el resultado."""
+        files = await vcf_picker.pick_files(
+            allowed_extensions=["vcf"],
+            dialog_title=t("import_vcf_title"),
+        )
         if not files:
             return
         try:
@@ -2234,12 +2237,7 @@ def main(page: ft.Page):
                      on_click=do_import, expand=True),
             ], spacing=10),
             _btn(f"\U0001f4f1  {t('import_vcf_btn')}", C["cyan"],
-                 on_click=lambda e: _on_vcf_files(
-                     vcf_picker.pick_files(
-                         allowed_extensions=["vcf"],
-                         dialog_title=t("import_vcf_title"),
-                     )
-                 ),
+                 on_click=_do_vcf_import,
                  expand=True),
 
             # ── Stats + Manual ────────────────────────────────────────────
@@ -2404,15 +2402,13 @@ def main(page: ft.Page):
         _play_birthday_sound()
         page.show_dialog(dlg)
 
-    # ── File pickers (persisten en overlay entre renders) ─────────────────
-    # Container(visible=False) → Flutter Offstage: el control existe en el
-    # árbol (pick_files funciona) pero no se renderiza → sin barra roja.
+    # ── File pickers (Service controls — van directo en page.overlay) ─────
+    # pick_files() es async en Flet 0.85.1 — los handlers usan async/await.
+    # La barra roja "Unknown control" solo aparece en desktop runner,
+    # NO en el APK compilado donde Flutter conoce FilePicker nativamente.
     vcf_picker = ft.FilePicker()
     img_picker = ft.FilePicker()
-    page.overlay.extend([
-        ft.Container(content=vcf_picker, visible=False),
-        ft.Container(content=img_picker, visible=False),
-    ])
+    page.overlay.extend([vcf_picker, img_picker])
 
     # ── Initial render ────────────────────────────────────────────────────
     render()

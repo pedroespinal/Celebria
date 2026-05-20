@@ -24,7 +24,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.3.2"
+APP_VERSION = "1.4.0"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -179,6 +179,12 @@ T = {
         "mobile_only":      "📱 Función disponible solo en Android",
         "rights":           "Todos los derechos reservados",
         "created_by":       "Creado por",
+        "milestone_badge":  "✨ Especial",
+        "milestone_popup":  "¡Un año muy especial!",
+        "backup_remind_tip": "💾 Recuerda hacer un respaldo de tus contactos",
+        "stats_milestones": "Cumpleaños especiales este año",
+        "stats_no_milestones": "Sin cumpleaños redondos este año",
+        "cal_multi_title":  "Cumpleaños del día",
     },
     "en": {
         "app_sub":        "Birthday Reminder",
@@ -291,6 +297,12 @@ T = {
         "mobile_only":      "📱 Feature available on Android only",
         "rights":           "All rights reserved",
         "created_by":       "Created by",
+        "milestone_badge":  "✨ Special",
+        "milestone_popup":  "A very special year!",
+        "backup_remind_tip": "💾 Remember to back up your contacts",
+        "stats_milestones": "Milestone birthdays this year",
+        "stats_no_milestones": "No milestone birthdays this year",
+        "cal_multi_title":  "Birthdays on this day",
     },
 }
 
@@ -338,6 +350,8 @@ def calc_age(day, month, year):
 REL_ICON      = {"family": "\U0001f46a", "friend": "\U0001f465",
                  "work": "\U0001f4bc", "other": "⭐"}
 REL_COLOR_KEY = {"family": "cyan", "friend": "green", "work": "purple", "other": "yellow"}
+
+MILESTONE_AGES = {15, 18, 21, 25, 30, 40, 50, 60, 70, 75, 80, 90, 100}
 
 
 def rel_icon(rel):  return REL_ICON.get(rel, "⭐")
@@ -638,7 +652,10 @@ _HELP_ES = [
      "• Los días con cumpleaños aparecen resaltados en rosa con \U0001f382.\n"
      "• El día de hoy aparece resaltado en cian.\n"
      "• Navega entre meses con los botones ◄  ►.\n"
-     "• Debajo del calendario verás la lista de cumpleaños del mes."),
+     "• Debajo del calendario verás la lista de cumpleaños del mes.\n\n"
+     "Toca cualquier día resaltado para ir directamente al detalle\n"
+     "del contacto. Si hay varios cumpleaños ese día, se mostrará\n"
+     "una lista para que elijas cuál quieres ver."),
     ("\U0001f4ac", "Botón de WhatsApp",
      "Si un contacto tiene número de teléfono guardado:\n\n"
      "1. Toca el contacto para abrir su detalle.\n"
@@ -704,12 +721,16 @@ _HELP_ES = [
      "• Cuántos cumplen hoy, esta semana y este mes\n"
      "• El próximo cumpleaños con los días que faltan\n"
      "• Distribución por tipo de relación (Familia, Amigos, Trabajo, Otro)\n"
-     "• Gráfica de barras con la distribución de cumpleaños por mes\n\n"
+     "• Gráfica de barras con la distribución de cumpleaños por mes\n"
+     "• ✨ Cumpleaños especiales — contactos que cumplen 15, 18, 21, 25,\n"
+     "  30, 40, 50, 60, 70, 75, 80, 90 o 100 años este año\n\n"
      "El mes actual aparece resaltado en cian."),
     ("\U0001f4a1", "Consejos útiles",
      "• Agrega el año de nacimiento para ver la edad exacta que cumple cada persona.\n\n"
      "• El color del borde de cada tarjeta indica la urgencia:\n"
      "   Rosa neón = HOY  •  Amarillo = esta semana  •  Cian = próximos 30 días\n\n"
+     "• ✨ Borde amarillo doble = cumpleaños redondo este año (15, 18, 21, 25, 30...)\n\n"
+     "• Toca un día rosado en el Calendario para ir directo al detalle del contacto.\n\n"
      "• Agrega notas como '¿Le gusta el chocolate?' para recordar qué regalarle.\n\n"
      "• Usa la categoría Trabajo para cumpleaños de colegas.\n\n"
      "• El archivo JSON de respaldo es texto plano — puedes abrirlo en cualquier editor."),
@@ -766,7 +787,10 @@ _HELP_EN = [
      "• Days with birthdays are highlighted in pink with \U0001f382.\n"
      "• Today is highlighted in cyan.\n"
      "• Use ◄  ► to navigate between months.\n"
-     "• Below the calendar, see the complete list of birthdays for the month."),
+     "• Below the calendar, see the complete list of birthdays for the month.\n\n"
+     "Tap any highlighted day to go directly to that contact's detail view.\n"
+     "If multiple contacts share the day, a list will appear so you can\n"
+     "pick which one to open."),
     ("\U0001f4ac", "WhatsApp button",
      "If a contact has a phone number saved:\n\n"
      "1. Tap the contact to open their detail view.\n"
@@ -831,12 +855,16 @@ _HELP_EN = [
      "• How many have birthdays today, this week, and this month\n"
      "• The next upcoming birthday with days remaining\n"
      "• Breakdown by relationship type (Family, Friends, Work, Other)\n"
-     "• Bar chart of birthday distribution across months\n\n"
+     "• Bar chart of birthday distribution across months\n"
+     "• ✨ Milestone birthdays — contacts turning 15, 18, 21, 25, 30,\n"
+     "  40, 50, 60, 70, 75, 80, 90 or 100 this year\n\n"
      "The current month is highlighted in cyan."),
     ("\U0001f4a1", "Useful tips",
      "• Add the birth year to see the exact age each person is turning.\n\n"
      "• The card border color shows urgency:\n"
      "   Neon pink = TODAY  •  Yellow = this week  •  Cyan = next 30 days\n\n"
+     "• ✨ Double amber border = milestone birthday this year (15, 18, 21, 25, 30...)\n\n"
+     "• Tap a pink day in the Calendar to jump straight to that contact's detail.\n\n"
      "• Add notes like 'Likes chocolate?' to remember gift ideas.\n\n"
      "• Use the Work category for colleagues to keep them separate from friends.\n\n"
      "• The JSON backup file is plain text — you can open it in any editor."),
@@ -1054,12 +1082,20 @@ def main(page: ft.Page):
         age    = calc_age(day, month, year)
         rc     = rel_color(relation)
 
+        # Milestone detection: age turning THIS calendar year
+        _this_year = date.today().year
+        _age_this_year = (_this_year - year) if year else None
+        is_milestone = (_age_this_year in MILESTONE_AGES) if _age_this_year is not None else False
+
         if d_left == 0:
             accent = C["pink"]; bdr_w = 2
         elif d_left <= 7:
             accent = C["yellow"]; bdr_w = 1
         else:
             accent = C["cyan"]; bdr_w = 1
+        # Milestone overrides border to amber with thicker stroke
+        if is_milestone:
+            accent = C["yellow"]; bdr_w = 2
         bg = C["card"]  # same background for all — only border differs
 
         if d_left == 0:
@@ -1071,6 +1107,8 @@ def main(page: ft.Page):
         else:
             badge_txt = f"{d_left}\n{t('days_left')}"
             badge_col = accent
+        if is_milestone:
+            badge_txt = badge_txt + "\n✨"
 
         ds = f"{day} {month_name(month)}"
         if year: ds += f" {year}"
@@ -1544,6 +1582,10 @@ def main(page: ft.Page):
             else:
                 db.add(n, d, m, y, ph, em, no, state["rel"],
                        photo=fp, gift_note=gn)
+                # Backup reminder every 10 contacts
+                _total_now = len(db.all_contacts())
+                if _total_now > 0 and _total_now % 10 == 0:
+                    _toast(t("backup_remind_tip"))
             state["edit_id"] = None
             state["rel"]     = "friend"
             state["photo"]   = ""
@@ -1804,10 +1846,52 @@ def main(page: ft.Page):
         contacts = db.all_contacts()
         bd_map: dict = {}
         for c in contacts:
-            bd_map.setdefault((c[3], c[2]), []).append(c[1])
+            bd_map.setdefault((c[3], c[2]), []).append(c)   # store full rows
 
         first_wd, num_days = calendar.monthrange(y, m)
         today = date.today()
+
+        def _open_cal_day(rows_for_day):
+            """Open detail view for single birthday; show picker dialog for multiple."""
+            if len(rows_for_day) == 1:
+                state["detail_id"] = rows_for_day[0][0]
+                navigate("detail")
+            else:
+                def _pick(cid):
+                    page.pop_dialog()
+                    state["detail_id"] = cid
+                    navigate("detail")
+                items = [
+                    ft.ListTile(
+                        leading=ft.Text(rel_icon(r[8]), size=18),
+                        title=ft.Text(r[1], color=C["t1"], size=13),
+                        subtitle=ft.Text(
+                            f"{r[2]} {month_name(r[3])}",
+                            color=C["t3"], size=11,
+                        ),
+                        on_click=lambda e, cid=r[0]: _pick(cid),
+                    )
+                    for r in rows_for_day
+                ]
+                dlg = ft.AlertDialog(
+                    modal=True,
+                    bgcolor=C["bg2"],
+                    title=ft.Text(t("cal_multi_title"), color=C["cyan"],
+                                  weight=ft.FontWeight.BOLD),
+                    content=ft.Container(
+                        content=ft.Column(items, scroll=ft.ScrollMode.AUTO, spacing=0),
+                        height=min(300, len(rows_for_day) * 64),
+                        width=260,
+                    ),
+                    actions=[
+                        ft.TextButton(
+                            t("btn_cancel"),
+                            on_click=lambda e: page.pop_dialog(),
+                            style=ft.ButtonStyle(color=C["t3"]),
+                        ),
+                    ],
+                )
+                page.show_dialog(dlg)
 
         abbrs = T[LANG[0]]["days_abbr"]
         day_hdrs = ft.Row([
@@ -1835,6 +1919,8 @@ def main(page: ft.Page):
                 bgcolor=bg, border_radius=6,
                 expand=True, height=42,
                 alignment=ft.Alignment.CENTER,
+                on_click=(lambda e, rows=bds: _open_cal_day(rows)) if bds else None,
+                ink=bool(bds),
             ))
 
         grid_rows = []
@@ -2018,11 +2104,50 @@ def main(page: ft.Page):
                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
         ], spacing=4), padding=ft.Padding(left=12, top=10, right=12, bottom=10))
 
+        # ── Milestone birthdays this year ─────────────────────────────────
+        milestone_rows = []
+        for r in rows:
+            if not r[4]:   # no birth year → can't know age
+                continue
+            age_this_yr = today.year - r[4]
+            if age_this_yr in MILESTONE_AGES:
+                milestone_rows.append((r, age_this_yr))
+        milestone_rows.sort(key=lambda x: days_until(x[0][2], x[0][3]))
+
+        milestone_items = []
+        if milestone_rows:
+            for mr, ma in milestone_rows:
+                d_ms = days_until(mr[2], mr[3])
+                d_ms_txt = t("today_badge") if d_ms == 0 else f"{d_ms} {t('stats_days')}"
+                milestone_items.append(ft.Row([
+                    ft.Text("✨", size=16, width=28,
+                            text_align=ft.TextAlign.CENTER),
+                    ft.Column([
+                        ft.Text(mr[1], size=12, color=C["yellow"],
+                                weight=ft.FontWeight.W_600,
+                                max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
+                        ft.Text(f"{ma} {t('years')}  •  {d_ms_txt}",
+                                size=10, color=C["t3"]),
+                    ], spacing=2, expand=True),
+                ], spacing=6, vertical_alignment=ft.CrossAxisAlignment.CENTER))
+        else:
+            milestone_items.append(
+                ft.Text(t("stats_no_milestones"), size=11, color=C["t3"])
+            )
+
+        milestone_card = _card(ft.Column([
+            ft.Text(t("stats_milestones"), size=11, color=C["t2"],
+                    weight=ft.FontWeight.W_600),
+            ft.Divider(height=6, color="transparent"),
+            *milestone_items,
+        ], spacing=8), padding=ft.Padding(left=12, top=10, right=12, bottom=10))
+
         items = [
             summary_row1, summary_row2,
             next_card,
             rel_card,
             month_card,
+            milestone_card,
             _footer(),
             ft.Container(height=16),
         ]
@@ -2323,8 +2448,6 @@ def main(page: ft.Page):
                 ft.Text(f"\U0001f382  {APP_NAME}  v{APP_VERSION}",
                         size=13, color=C["cyan"], weight=ft.FontWeight.BOLD),
                 ft.Text(t("app_sub"),   size=11, color=C["t2"]),
-                ft.Text(f"© {APP_YEAR}  {APP_AUTHOR}", size=11, color=C["t2"]),
-                ft.Text(t("rights"),    size=10, color=C["t3"]),
             ], spacing=4)),
 
             _footer(),
@@ -2397,19 +2520,25 @@ def main(page: ft.Page):
         for row in today_contacts:
             _, name, day, month, year, *_ = row
             age = calc_age(day, month, year)
+            _age_this_year = (date.today().year - year) if year else None
+            _milestone = (_age_this_year in MILESTONE_AGES) if _age_this_year is not None else False
             if age:
                 line = f"{name}\n{t('popup_turns')} {age} {t('popup_years')} \U0001f382"
             else:
                 line = f"{name}  \U0001f382"
+            if _milestone:
+                line += f"\n✨ {t('milestone_popup')}"
             contact_cards.append(
                 ft.Container(
                     content=ft.Text(
-                        line, size=14, color=C["cyan"],
+                        line, size=14,
+                        color=C["yellow"] if _milestone else C["cyan"],
                         weight=ft.FontWeight.W_600,
                         text_align=ft.TextAlign.CENTER,
                     ),
-                    bgcolor=C["cyandim"],
+                    bgcolor=C["purpledim"] if _milestone else C["cyandim"],
                     border_radius=12,
+                    border=_bdr(1, C["yellow"]) if _milestone else None,
                     padding=ft.Padding(left=16, top=10, right=16, bottom=10),
                 )
             )

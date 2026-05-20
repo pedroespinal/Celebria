@@ -24,7 +24,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.2.2"
+APP_VERSION = "1.2.3"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -2456,12 +2456,6 @@ def main(page: ft.Page):
 
             dl_color = C["red"] if forced else C["cyan"]
 
-            def _do_download(e):
-                # Llamar directo desde el event handler (event thread de Flet)
-                # Timer fue removido — launch_url desde background thread falla silenciosamente
-                page.pop_dialog()
-                page.launch_url(dl_url)
-
             actions = []
             if not forced:
                 actions.append(ft.TextButton(
@@ -2469,9 +2463,12 @@ def main(page: ft.Page):
                     on_click=lambda e: page.pop_dialog(),
                     style=ft.ButtonStyle(color=C["t3"]),
                 ))
+            # url= usa Flutter url_launcher (funciona en Android 11+)
+            # page.launch_url() falla silenciosamente en Android 11+
             actions.append(ft.TextButton(
                 btn_dl,
-                on_click=_do_download,
+                url=dl_url,
+                on_click=lambda e: page.pop_dialog(),
                 style=ft.ButtonStyle(color=dl_color),
             ))
 

@@ -24,7 +24,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.1.1"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -38,7 +38,7 @@ _DARK = {
     "bg":        "#07071a", "bg2":       "#0c0c24", "bg3":       "#10102e",
     "card":      "#0d0d26", "border":    "#1c1c40",
     "cyan":      "#00e5ff", "cyandim":   "#003d54",
-    "purple":    "#7c3aed", "purpledim": "#2d1566",
+    "purple":    "#7c3aed", "purpledim": "#2d1566", "violet": "#a78bfa",
     "pink":      "#f72585", "pinkdim":   "#5c0d33",
     "green":     "#00ff88", "greendim":  "#003320",
     "yellow":    "#ffbe0b", "red":       "#ff3d3d",
@@ -48,7 +48,7 @@ _LIGHT = {
     "bg":        "#f0f0ff", "bg2":       "#e4e4f8", "bg3":       "#d6d6ef",
     "card":      "#e8e8fb", "border":    "#8888bb",
     "cyan":      "#003d99", "cyandim":   "#b8d0ff",
-    "purple":    "#5500aa", "purpledim": "#ddd0ff",
+    "purple":    "#5500aa", "purpledim": "#ddd0ff", "violet": "#6d28d9",
     "pink":      "#aa004d", "pinkdim":   "#ffd0e8",
     "green":     "#005522", "greendim":  "#c0f0d8",
     "yellow":    "#6b5000", "red":       "#aa0000",
@@ -633,7 +633,7 @@ _HELP_EN = [
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 def main(page: ft.Page):
-    page.title = APP_NAME
+    page.title = f"{APP_NAME} v{APP_VERSION}"
     page.bgcolor = C["bg"]
     page.padding = 0
     try:
@@ -1012,7 +1012,7 @@ def main(page: ft.Page):
     # FIX: single page.add() call; Column(expand=True) + ListView(expand=True)
     # ─────────────────────────────────────────────────────────────────────
     def _show_home():
-        page.appbar         = _appbar(f"\U0001f382  {APP_NAME}", actions=_std_actions())
+        page.appbar         = _appbar(f"\U0001f382  {APP_NAME}  v{APP_VERSION}", actions=_std_actions())
         page.navigation_bar = _nav_bar("home")
 
         def open_contact(cid):
@@ -1481,7 +1481,7 @@ def main(page: ft.Page):
 
         abbrs = T[LANG[0]]["days_abbr"]
         day_hdrs = ft.Row([
-            ft.Text(a, size=11, color=C["purple"], weight=ft.FontWeight.BOLD,
+            ft.Text(a, size=11, color=C["violet"], weight=ft.FontWeight.BOLD,
                     expand=True, text_align=ft.TextAlign.CENTER)
             for a in abbrs
         ])
@@ -1525,12 +1525,12 @@ def main(page: ft.Page):
 
         nav_row = ft.Row([
             ft.IconButton(ft.Icons.CHEVRON_LEFT,  on_click=prev_m,
-                          icon_color=C["purple"]),
+                          icon_color=C["violet"]),
             ft.Text(f"{month_name(m)} {y}", size=16, color=C["cyan"],
                     weight=ft.FontWeight.BOLD, expand=True,
                     text_align=ft.TextAlign.CENTER),
             ft.IconButton(ft.Icons.CHEVRON_RIGHT, on_click=next_m,
-                          icon_color=C["purple"]),
+                          icon_color=C["violet"]),
         ], alignment=ft.MainAxisAlignment.CENTER)
 
         grid_box = ft.Container(

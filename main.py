@@ -24,7 +24,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.2.4"
+APP_VERSION = "1.2.5"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -2410,15 +2410,17 @@ def main(page: ft.Page):
         _play_birthday_sound()
         page.show_dialog(dlg)
 
-    # ── File pickers (Service controls) ──────────────────────────────────
-    # Solo se registran en Android: en desktop runner causan barra roja
-    # "Unknown control: FilePicker" que bloquea la pantalla.
-    # En el APK compilado page.platform == ANDROID → se registran normalmente.
+    # ── File pickers ──────────────────────────────────────────────────────
+    # FilePicker genera "Unknown control" en AMBAS plataformas si se agrega
+    # directamente al overlay. Solución: Container(visible=False) → Flutter
+    # lo renderiza como Offstage → sin barra roja, pero el picker sigue
+    # funcional porque pick_files() usa method channels (no depende del render).
+    # Lo mismo que hace flet_audio con el control Audio.
     _is_android = (page.platform == ft.PagePlatform.ANDROID)
     vcf_picker = ft.FilePicker()
     img_picker = ft.FilePicker()
-    if _is_android:
-        page.overlay.extend([vcf_picker, img_picker])
+    page.overlay.append(ft.Container(content=vcf_picker, visible=False))
+    page.overlay.append(ft.Container(content=img_picker, visible=False))
 
     # ── Initial render ────────────────────────────────────────────────────
     render()

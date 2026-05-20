@@ -5,7 +5,7 @@
 Celebria es una app Android personal para nunca olvidar un cumpleaños.  
 Diseño futurista oscuro, bilingüe ES/EN, sin publicidad y sin conexión requerida para su uso principal.
 
-[![Versión](https://img.shields.io/badge/versión-1.2.2-00e5ff?style=flat-square)](https://github.com/pedroespinal/Celebria/releases/latest)
+[![Versión](https://img.shields.io/badge/versión-1.3.2-00e5ff?style=flat-square)](https://github.com/pedroespinal/Celebria/releases/latest)
 [![Plataforma](https://img.shields.io/badge/plataforma-Android-00ff88?style=flat-square)](https://github.com/pedroespinal/Celebria/releases/latest)
 [![Python](https://img.shields.io/badge/Python-3-yellow?style=flat-square)](https://www.python.org/)
 [![Flet](https://img.shields.io/badge/Flet-0.85.1-7c3aed?style=flat-square)](https://flet.dev/)
@@ -35,10 +35,10 @@ Diseño futurista oscuro, bilingüe ES/EN, sin publicidad y sin conexión requer
 - 🔍 Búsqueda en tiempo real (teclado siempre abierto) + filtro por tipo de relación
 - 📆 Calendario mensual con días de cumpleaños destacados
 - 💬 Botón WhatsApp directo por contacto
-- 📤 Exportar / Importar contactos en JSON (carpeta Descargas)
+- 📤 Exportar / Importar contactos en JSON
 - 🌙 Tema oscuro / claro con toggle instantáneo
-- 🌐 Bilingüe Español / Inglés con cambio en tiempo real
-- 🔄 Verificador de actualizaciones automático al abrir la app
+- 🌐 Bilingüe Español / Inglés con cambio en tiempo real (incluyendo footer y About)
+- 🔄 Verificador de actualizaciones automático al abrir la app (aparece en Home)
 - 🔒 Sistema de versión mínima forzada vía `version.json`
 
 ---
@@ -61,7 +61,7 @@ Diseño futurista oscuro, bilingüe ES/EN, sin publicidad y sin conexión requer
 
 ```
 C:\Celebria\
-├── main.py          # App completa en un solo archivo (~2520 líneas)
+├── main.py          # App completa en un solo archivo (~2620 líneas)
 ├── requirements.txt # flet-audio==0.85.1
 ├── version.json     # Control de versiones para actualizaciones in-app
 ├── release.ps1      # Script de release completamente automatizado
@@ -93,18 +93,16 @@ flet build apk --artifact "Celebria-X.Y.Z"
 ## 🚀 Cómo publicar un release
 
 ```powershell
-.\release.ps1 -Version "X.Y.Z" -Notes "Descripción del cambio"
-
-# Omitir prueba local (si ya se probó manualmente):
-.\release.ps1 -Version "X.Y.Z" -Notes "Descripción" -SkipTest
+# Siempre usar -SkipTest (release.ps1 usa Read-Host que requiere modo interactivo)
+.\release.ps1 -Version "X.Y.Z" -Notes "Descripción del cambio" -SkipTest
 ```
 
 El script hace todo automáticamente en 6 pasos:
 
-1. Prueba local — abre la app en escritorio para verificar antes de compilar
+1. ~~Prueba local~~ (omitida con `-SkipTest`)
 2. Actualiza `APP_VERSION` en `main.py`
 3. Actualiza `version.json` (`latest` + `download_url`)
-4. Compila el APK con `flet build apk --artifact "Celebria-X.Y.Z"`
+4. Compila el APK con `flet build apk --artifact "Celebria-vX.Y.Z"`
 5. Hace `git commit` + `git tag` + `git push` a GitHub
 6. Crea el release en GitHub vía API y sube el APK como asset
 
@@ -119,9 +117,9 @@ La app lee `version.json` al arrancar para verificar si hay una versión nueva:
 
 ```json
 {
-  "latest":       "1.2.0",
+  "latest":       "1.3.2",
   "minimum":      "1.0.0",
-  "download_url": "https://github.com/pedroespinal/Celebria/releases/download/v1.2.0/Celebria-v1.2.0.apk"
+  "download_url": "https://github.com/pedroespinal/Celebria/releases/download/v1.3.2/Celebria-v1.3.2.apk"
 }
 ```
 
@@ -129,12 +127,14 @@ La app lee `version.json` al arrancar para verificar si hay una versión nueva:
 |----------------|---------------------|------------------------------------------------|
 | `latest`       | `release.ps1`       | Versión más reciente disponible                |
 | `minimum`      | **Manual**          | Versión mínima soportada                       |
-| `download_url` | `release.ps1`       | Link directo al APK                            |
+| `download_url` | `release.ps1`       | Link directo al APK (referencia)               |
 
 **Lógica:**
 - `instalada < minimum` → diálogo obligatorio, sin opción de cerrar
 - `minimum ≤ instalada < latest` → diálogo sugerido con opción "Ahora no"
 - `instalada == latest` → silencioso
+
+El botón "Descargar" abre la **página de releases** de GitHub (no la URL directa del APK) para garantizar que Chrome en Android complete la descarga correctamente.
 
 Para forzar una actualización: editar `minimum` directamente en GitHub y hacer push.  
 No requiere recompilar la app.
@@ -144,14 +144,18 @@ No requiere recompilar la app.
 ## ⚠ Quirks conocidos
 
 - `flet build apk` requiere `chcp 65001` + `NO_COLOR=1` en Windows para evitar crash de Unicode por la librería `rich`
-- Controles de servicio (`flet_audio`, `FilePicker`) se envuelven en `Container(visible=False)` → Flutter usa `Offstage`: el control funciona pero no se renderiza (evita la barra roja de error en desktop)
-- Los links externos (WhatsApp, descarga de APK) usan la propiedad `url=` del Container en vez de `page.launch_url()` para compatibilidad con Android 11+
-- `page.launch_url()` falla silenciosamente si se llama desde un hilo secundario (`threading.Timer`); debe llamarse desde el event handler de Flet
-- En Flet 0.85.1, `FilePicker.pick_files()` es **sincrónico** — devuelve `list[FilePickerFile]` directamente; `ft.FilePickerResultEvent` no existe en esta versión
-- Las fotos de contactos se almacenan en `~/.celebria/photos/` (desktop) o `FLET_APP_STORAGE_DATA/photos/` (Android)
+- `flet_audio` se envuelve en `Container(visible=False)` → Flutter Offstage: el control funciona (audio) pero no se renderiza, evitando la barra roja
+- `FilePicker` genera "Unknown control" red bar si se añade a `page.overlay`. Fix definitivo: declarar los pickers ANTES de `render()` y registrarlos DESPUÉS con `page._services.register_service(picker)`. Registrar antes de `render()` causa **pantalla negra**
+- `FilePicker.pick_files()` es **async** en Flet 0.85.1 — usar `async def handler(e): files = await picker.pick_files(...)`. Sin `await` retorna una corutina que se descarta silenciosamente
+- `ft.FilePickerResultEvent` no existe en Flet 0.85.1
+- `page.launch_url()` falla silenciosamente en Android 11+ — usar siempre la propiedad `url=` directamente en el control
+- `page.snack_bar` no existe en Flet 0.85.1 — usar `page.show_dialog(ft.SnackBar(...))`
+- Llamadas de UI desde hilos de fondo (background threads) deben hacerse con `page.run_task(async_fn)` para ejecutarse en el event loop correcto de Flet
+- Las fotos de contactos se almacenan en `FLET_APP_STORAGE_DATA/photos/` (Android) o `~/.celebria/photos/` (desktop)
+- Exportar JSON en Android usa `save_file(src_bytes=)` (requiere bytes); importar usa `pick_files(with_data=True)` (bytes más confiable que path en Android)
 
 ---
 
 ## 👤 Autor
 
-**Pedro Espinal** — Todos los derechos reservados © 2025
+**Pedro Espinal** — Todos los derechos reservados © 2026

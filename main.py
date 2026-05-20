@@ -24,7 +24,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.2.6"
+APP_VERSION = "1.2.7"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -2466,15 +2466,20 @@ def main(page: ft.Page):
 
     # ── Platform + File pickers ───────────────────────────────────────────
     # pick_files() / save_file() son async y requieren el picker en overlay.
-    # Usar 3 instancias separadas para evitar colisiones de estado:
-    #   vcf_picker  → importar .vcf e importar .json
-    #   img_picker  → seleccionar foto de contacto
-    #   save_picker → exportar JSON con save_file()
+    # ── File pickers ─────────────────────────────────────────────────────
+    # page._services.register_service() registra los pickers en el
+    # ServiceRegistry interno de Flet (NO en page.overlay).
+    # Esto evita el "Unknown control" red bar: Flutter maneja los hijos de
+    # ServiceRegistry como servicios (sin renderizado visual), no como widgets.
+    # La API _invoke_method sigue funcionando porque el control sí tiene
+    # un UID válido y Flutter lo conoce a través del ServiceRegistry.
     _is_android = (page.platform == ft.PagePlatform.ANDROID)
-    vcf_picker  = ft.FilePicker()
-    img_picker  = ft.FilePicker()
-    save_picker = ft.FilePicker()
-    page.overlay.extend([vcf_picker, img_picker, save_picker])
+    vcf_picker  = ft.FilePicker()   # importar .vcf e importar .json
+    img_picker  = ft.FilePicker()   # seleccionar foto
+    save_picker = ft.FilePicker()   # exportar JSON (save_file)
+    page._services.register_service(vcf_picker)
+    page._services.register_service(img_picker)
+    page._services.register_service(save_picker)
 
     # ── Initial render ────────────────────────────────────────────────────
     render()

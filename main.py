@@ -24,7 +24,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.2.8"
+APP_VERSION = "1.2.9"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -177,6 +177,8 @@ T = {
         "stats_none":       "Sin contactos",
         "stats_days":       "días",
         "mobile_only":      "📱 Función disponible solo en Android",
+        "rights":           "Todos los derechos reservados",
+        "created_by":       "Creado por",
     },
     "en": {
         "app_sub":        "Birthday Reminder",
@@ -287,6 +289,8 @@ T = {
         "stats_none":       "No contacts yet",
         "stats_days":       "days",
         "mobile_only":      "📱 Feature available on Android only",
+        "rights":           "All rights reserved",
+        "created_by":       "Created by",
     },
 }
 
@@ -1020,8 +1024,9 @@ def main(page: ft.Page):
     def _footer():
         # Neon orange — vivo en oscuro, ambar oscuro en claro
         footer_color = "#ff8800" if THEME[0] == "dark" else "#cc5500"
+        cr = f"{t('created_by')}: {APP_AUTHOR}   ·   {t('rights')}   ©{APP_YEAR}"
         return ft.Text(
-            COPYRIGHT, size=10, color=footer_color,
+            cr, size=10, color=footer_color,
             text_align=ft.TextAlign.CENTER,
         )
 
@@ -2319,8 +2324,11 @@ def main(page: ft.Page):
                         size=13, color=C["cyan"], weight=ft.FontWeight.BOLD),
                 ft.Text(t("app_sub"),   size=11, color=C["t2"]),
                 ft.Text(f"© {APP_YEAR}  {APP_AUTHOR}", size=11, color=C["t2"]),
-                ft.Text(APP_RIGHTS,    size=10, color=C["t3"]),
-                ft.Text(COPYRIGHT,     size=9,  color=C["t3"]),
+                ft.Text(t("rights"),    size=10, color=C["t3"]),
+                ft.Text(
+                    f"{t('created_by')}: {APP_AUTHOR}   ·   {t('rights')}   ©{APP_YEAR}",
+                    size=9, color=C["t3"],
+                ),
             ], spacing=4)),
 
             _footer(),

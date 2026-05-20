@@ -24,7 +24,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.0.9"
+APP_VERSION = "1.1.0"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -1888,11 +1888,10 @@ def main(page: ft.Page):
             dl_color = C["red"] if forced else C["cyan"]
 
             def _do_download(e):
-                # Cerrar el diálogo primero, luego lanzar URL
-                # El AlertDialog bloquea gestos externos mientras está abierto
+                # Llamar directo desde el event handler (event thread de Flet)
+                # Timer fue removido — launch_url desde background thread falla silenciosamente
                 page.pop_dialog()
-                import threading
-                threading.Timer(0.4, lambda: page.launch_url(dl_url)).start()
+                page.launch_url(dl_url)
 
             actions = []
             if not forced:

@@ -24,7 +24,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.1.3"
+APP_VERSION = "1.2.0"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -150,6 +150,32 @@ T = {
             "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
         ],
         "days_abbr": ["Lu", "Ma", "Mi", "Ju", "Vi", "Sa", "Do"],
+        "import_vcf_btn":   "Importar desde Agenda (.vcf)",
+        "import_vcf_title": "Importar desde Agenda",
+        "import_vcf_found": "contactos con cumpleaños encontrados",
+        "import_vcf_none":  "No se encontraron contactos con cumpleaños",
+        "import_vcf_do":    "IMPORTAR SELECCIONADOS",
+        "import_vcf_all":   "Todos",
+        "import_vcf_clear": "Ninguno",
+        "import_vcf_ok":    "contactos importados desde la agenda",
+        "import_vcf_empty": "Selecciona al menos un contacto",
+        "field_photo":      "Foto",
+        "photo_add":        "Agregar foto",
+        "photo_change":     "Cambiar foto",
+        "photo_remove":     "Quitar foto",
+        "field_gift":       "Nota de regalo",
+        "gift_hint":        "¿Qué le gustaría recibir?",
+        "stats_title":      "Estadísticas rápidas",
+        "stats_btn":        "Estadísticas",
+        "stats_total":      "Total de contactos",
+        "stats_today":      "Cumplen hoy",
+        "stats_week":       "Esta semana",
+        "stats_month_sec":  "Este mes",
+        "stats_by_rel":     "Por relación",
+        "stats_by_month":   "Distribución por mes",
+        "stats_next":       "Próximo cumpleaños",
+        "stats_none":       "Sin contactos",
+        "stats_days":       "días",
     },
     "en": {
         "app_sub":        "Birthday Reminder",
@@ -233,6 +259,32 @@ T = {
             "July", "August", "September", "October", "November", "December",
         ],
         "days_abbr": ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"],
+        "import_vcf_btn":   "Import from Contacts (.vcf)",
+        "import_vcf_title": "Import from Contacts",
+        "import_vcf_found": "contacts with birthdays found",
+        "import_vcf_none":  "No contacts with birthdays found in this file",
+        "import_vcf_do":    "IMPORT SELECTED",
+        "import_vcf_all":   "All",
+        "import_vcf_clear": "None",
+        "import_vcf_ok":    "contacts imported from contacts list",
+        "import_vcf_empty": "Select at least one contact",
+        "field_photo":      "Photo",
+        "photo_add":        "Add photo",
+        "photo_change":     "Change photo",
+        "photo_remove":     "Remove photo",
+        "field_gift":       "Gift note",
+        "gift_hint":        "What would they like to receive?",
+        "stats_title":      "Quick Statistics",
+        "stats_btn":        "Statistics",
+        "stats_total":      "Total contacts",
+        "stats_today":      "Birthdays today",
+        "stats_week":       "This week",
+        "stats_month_sec":  "This month",
+        "stats_by_rel":     "By relationship",
+        "stats_by_month":   "Birthday distribution by month",
+        "stats_next":       "Next birthday",
+        "stats_none":       "No contacts yet",
+        "stats_days":       "days",
     },
 }
 
@@ -316,22 +368,32 @@ class DB:
     def _init(self):
         self.conn.executescript("""
             CREATE TABLE IF NOT EXISTS contacts (
-                id       INTEGER PRIMARY KEY AUTOINCREMENT,
-                name     TEXT    NOT NULL,
-                day      INTEGER NOT NULL,
-                month    INTEGER NOT NULL,
-                year     INTEGER,
-                phone    TEXT    DEFAULT '',
-                email    TEXT    DEFAULT '',
-                notes    TEXT    DEFAULT '',
-                relation TEXT    DEFAULT 'friend'
+                id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                name      TEXT    NOT NULL,
+                day       INTEGER NOT NULL,
+                month     INTEGER NOT NULL,
+                year      INTEGER,
+                phone     TEXT    DEFAULT '',
+                email     TEXT    DEFAULT '',
+                notes     TEXT    DEFAULT '',
+                relation  TEXT    DEFAULT 'friend',
+                photo     TEXT    DEFAULT '',
+                gift_note TEXT    DEFAULT ''
             );
             CREATE TABLE IF NOT EXISTS settings (
                 key   TEXT PRIMARY KEY,
                 value TEXT
             );
         """)
-        self.conn.commit()
+        # Migration: add columns to existing installations
+        for col, default in [("photo", "''"), ("gift_note", "''")]:
+            try:
+                self.conn.execute(
+                    f"ALTER TABLE contacts ADD COLUMN {col} TEXT DEFAULT {default}"
+                )
+                self.conn.commit()
+            except Exception:
+                pass  # column already exists
 
     def get(self, key, default=""):
         row = self.conn.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
@@ -345,29 +407,35 @@ class DB:
 
     def all_contacts(self):
         return self.conn.execute(
-            "SELECT id,name,day,month,year,phone,email,notes,relation "
+            "SELECT id,name,day,month,year,phone,email,notes,relation,photo,gift_note "
             "FROM contacts ORDER BY month,day,name"
         ).fetchall()
 
     def get_contact(self, cid):
         return self.conn.execute(
-            "SELECT id,name,day,month,year,phone,email,notes,relation "
+            "SELECT id,name,day,month,year,phone,email,notes,relation,photo,gift_note "
             "FROM contacts WHERE id=?", (cid,)
         ).fetchone()
 
-    def add(self, name, day, month, year, phone, email, notes, relation):
+    def add(self, name, day, month, year, phone, email, notes, relation,
+            photo="", gift_note=""):
         self.conn.execute(
-            "INSERT INTO contacts(name,day,month,year,phone,email,notes,relation) "
-            "VALUES(?,?,?,?,?,?,?,?)",
-            (name, int(day), int(month), year or None, phone, email, notes, relation),
+            "INSERT INTO contacts"
+            "(name,day,month,year,phone,email,notes,relation,photo,gift_note) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?)",
+            (name, int(day), int(month), year or None,
+             phone, email, notes, relation, photo, gift_note),
         )
         self.conn.commit()
 
-    def update(self, cid, name, day, month, year, phone, email, notes, relation):
+    def update(self, cid, name, day, month, year, phone, email, notes, relation,
+               photo="", gift_note=""):
         self.conn.execute(
-            "UPDATE contacts SET name=?,day=?,month=?,year=?,phone=?,email=?,notes=?,relation=? "
-            "WHERE id=?",
-            (name, int(day), int(month), year or None, phone, email, notes, relation, cid),
+            "UPDATE contacts "
+            "SET name=?,day=?,month=?,year=?,phone=?,email=?,notes=?,"
+            "relation=?,photo=?,gift_note=? WHERE id=?",
+            (name, int(day), int(month), year or None,
+             phone, email, notes, relation, photo, gift_note, cid),
         )
         self.conn.commit()
 
@@ -379,7 +447,8 @@ class DB:
         rows = self.all_contacts()
         data = [
             {"name": r[1], "day": r[2], "month": r[3], "year": r[4],
-             "phone": r[5], "email": r[6], "notes": r[7], "relation": r[8]}
+             "phone": r[5], "email": r[6], "notes": r[7], "relation": r[8],
+             "gift_note": r[10] if len(r) > 10 else ""}
             for r in rows
         ]
         return json.dumps(
@@ -396,10 +465,77 @@ class DB:
                     c.get("name", "?"), c.get("day", 1), c.get("month", 1),
                     c.get("year"), c.get("phone", ""), c.get("email", ""),
                     c.get("notes", ""), c.get("relation", "friend"),
+                    gift_note=c.get("gift_note", ""),
                 )
             return len(items)
         except Exception:
             return -1
+
+
+# ── Photo storage helper ─────────────────────────────────────────────────────
+def _copy_photo(src_path: str) -> str:
+    """Copia la imagen al directorio de datos de la app y devuelve la ruta local."""
+    import shutil, time as _time
+    photos_dir = Path(DB_PATH).parent / "photos"
+    try:
+        photos_dir.mkdir(parents=True, exist_ok=True)
+        ext = Path(src_path).suffix.lower() or ".jpg"
+        dest = str(photos_dir / f"p_{int(_time.time() * 1000)}{ext}")
+        shutil.copy2(src_path, dest)
+        return dest
+    except Exception:
+        return src_path   # fallback: devuelve el original si no se puede copiar
+
+
+# ── vCard parser — extrae contactos con cumpleaños de archivos .vcf ──────────
+def _parse_vcf(content: str) -> list:
+    """Parsea contenido vCard y retorna lista de dicts con cumpleaños."""
+    result  = []
+    current: dict = {}
+
+    for raw_line in content.splitlines():
+        line  = raw_line.strip()
+        upper = line.upper()
+
+        if upper == "BEGIN:VCARD":
+            current = {}
+        elif upper == "END:VCARD":
+            d, m = current.get("day"), current.get("month")
+            if current.get("name") and d and m and 1 <= m <= 12 and 1 <= d <= 31:
+                result.append(current)
+            current = {}
+        elif upper.startswith("FN:"):
+            name = line[3:].strip()
+            if name:
+                current["name"] = name
+        elif upper.startswith("N:") and not current.get("name"):
+            parts = line[2:].split(";")
+            parts = [p.strip() for p in parts]
+            first = parts[1] if len(parts) > 1 else ""
+            last  = parts[0] if parts else ""
+            name  = f"{first} {last}".strip() if first else last
+            if name:
+                current["name"] = name
+        elif "BDAY" in upper:
+            raw = line.split(":")[-1].strip().replace("-", "").replace("/", "")
+            try:
+                if len(raw) == 8:               # YYYYMMDD
+                    yr = int(raw[:4])
+                    current["month"] = int(raw[4:6])
+                    current["day"]   = int(raw[6:8])
+                    current["year"]  = yr if 1900 < yr <= date.today().year else None
+                elif len(raw) == 4:             # MMDD (de --MMDD sin guiones)
+                    current["month"] = int(raw[:2])
+                    current["day"]   = int(raw[2:4])
+                    current["year"]  = None
+            except ValueError:
+                pass
+        elif "TEL" in upper and not current.get("phone"):
+            phone = line.split(":")[-1].strip()
+            if phone:
+                current["phone"] = phone
+
+    return result
 
 
 # ── Birthday chime — generated in memory, no asset path needed ───────────────
@@ -513,6 +649,17 @@ _HELP_ES = [
      "Importar JSON: lee el archivo Celebria_backup.json de Descargas "
      "y agrega esos contactos a la app.\n\n"
      "Ideal para copias de seguridad o pasar tus datos a un teléfono nuevo."),
+    ("\U0001f4f1", "Importar desde tu Agenda",
+     "Si quieres agregar varios contactos que ya tienen cumpleaños en tu teléfono:\n\n"
+     "1. En tu app de Contactos, exporta tus contactos a un archivo .vcf "
+     "(vCard). El nombre suele ser 'Contacts.vcf' o similar.\n"
+     "2. En Celebria, ve a Configuración → Respaldo de Datos → "
+     "Importar desde Agenda (.vcf).\n"
+     "3. Selecciona el archivo .vcf exportado.\n"
+     "4. Celebria encontrará solo los contactos con cumpleaños registrados.\n"
+     "5. Marca cuáles quieres importar y toca IMPORTAR SELECCIONADOS.\n\n"
+     "Solo se importan contactos que tengan Día y Mes en el archivo.\n"
+     "Si el año está incluido, la app calculará la edad automáticamente."),
     ("\U0001f310", "Cambiar el idioma",
      "Toca el botón EN que aparece en la esquina superior derecha "
      "de cualquier pantalla.\n\n"
@@ -529,6 +676,30 @@ _HELP_ES = [
      "Toca ⬇ Descargar para ir directamente a la descarga del APK nuevo.\n"
      "Toca Ahora no para cerrarlo y actualizar después.\n\n"
      "Si no ves el mensaje, ya tienes la versión más reciente instalada."),
+    ("\U0001f4f8", "Foto de contacto",
+     "Cada contacto puede tener una foto personalizada:\n\n"
+     "1. Abre el formulario de Agregar o Editar contacto.\n"
+     "2. En la sección Foto toca Agregar foto.\n"
+     "3. Selecciona cualquier imagen de tu galería o almacenamiento.\n"
+     "4. La foto se guarda localmente — sin subir a ningún servidor.\n\n"
+     "Si no hay foto, se muestra un círculo con la inicial del nombre "
+     "en el color de la relación (cian=Familia, verde=Amigo, etc.).\n\n"
+     "Toca Quitar foto en el formulario para eliminarla."),
+    ("\U0001f381", "Nota de regalo",
+     "Guarda ideas de regalo para cada contacto:\n\n"
+     "1. Abre el formulario de Agregar o Editar contacto.\n"
+     "2. En el campo Nota de regalo escribe lo que se te ocurra.\n"
+     "   Ejemplo: 'Le gusta el café colombiano' o 'Talla M de camiseta'.\n\n"
+     "La nota aparece en el detalle del contacto con el ícono 🎁.\n"
+     "No hay límite de caracteres — escribe todo lo que necesites recordar."),
+    ("\U0001f4ca", "Estadísticas rápidas",
+     "Ve a Configuración → Estadísticas para ver un resumen:\n\n"
+     "• Total de contactos registrados\n"
+     "• Cuántos cumplen hoy, esta semana y este mes\n"
+     "• El próximo cumpleaños con los días que faltan\n"
+     "• Distribución por tipo de relación (Familia, Amigos, Trabajo, Otro)\n"
+     "• Gráfica de barras con la distribución de cumpleaños por mes\n\n"
+     "El mes actual aparece resaltado en cian."),
     ("\U0001f4a1", "Consejos útiles",
      "• Agrega el año de nacimiento para ver la edad exacta que cumple cada persona.\n\n"
      "• El color del borde de cada tarjeta indica la urgencia:\n"
@@ -606,6 +777,17 @@ _HELP_EN = [
      "Import JSON: reads Celebria_backup.json from your Downloads folder "
      "and adds those contacts to the app.\n\n"
      "Ideal for backups or transferring your data to a new phone."),
+    ("\U0001f4f1", "Import from your Contacts",
+     "To quickly add contacts that already have birthdays saved on your phone:\n\n"
+     "1. In your Contacts app, export your contacts to a .vcf (vCard) file. "
+     "It is usually named 'Contacts.vcf' or similar.\n"
+     "2. In Celebria, go to Settings → Data Backup → "
+     "Import from Contacts (.vcf).\n"
+     "3. Select the exported .vcf file.\n"
+     "4. Celebria will find only contacts that have a birthday registered.\n"
+     "5. Check which ones you want and tap IMPORT SELECTED.\n\n"
+     "Only contacts with a birthday Day and Month in the file are imported.\n"
+     "If the year is included, the app will calculate the age automatically."),
     ("\U0001f310", "Changing the language",
      "Tap the ES button in the top-right corner of any screen.\n\n"
      "The language changes instantly throughout the app and is remembered "
@@ -621,6 +803,30 @@ _HELP_EN = [
      "Tap ⬇ Download to go directly to the new APK download page.\n"
      "Tap Not now to dismiss it and update later.\n\n"
      "If no message appears, you already have the latest version installed."),
+    ("\U0001f4f8", "Contact photo",
+     "Each contact can have a personalized photo:\n\n"
+     "1. Open the Add or Edit contact form.\n"
+     "2. In the Photo section, tap Add photo.\n"
+     "3. Select any image from your gallery or storage.\n"
+     "4. The photo is saved locally — never uploaded to any server.\n\n"
+     "Without a photo, a colored circle with the name's initial is shown "
+     "in the relationship color (cyan=Family, green=Friend, etc.).\n\n"
+     "Tap Remove photo in the form to clear it."),
+    ("\U0001f381", "Gift note",
+     "Save gift ideas for each contact:\n\n"
+     "1. Open the Add or Edit contact form.\n"
+     "2. In the Gift note field, write whatever comes to mind.\n"
+     "   Example: 'Loves Colombian coffee' or 'Size M t-shirt'.\n\n"
+     "The note appears in the contact detail view with the 🎁 icon.\n"
+     "No character limit — write as much as you need to remember."),
+    ("\U0001f4ca", "Quick Statistics",
+     "Go to Settings → Statistics for a summary:\n\n"
+     "• Total contacts registered\n"
+     "• How many have birthdays today, this week, and this month\n"
+     "• The next upcoming birthday with days remaining\n"
+     "• Breakdown by relationship type (Family, Friends, Work, Other)\n"
+     "• Bar chart of birthday distribution across months\n\n"
+     "The current month is highlighted in cyan."),
     ("\U0001f4a1", "Useful tips",
      "• Add the birth year to see the exact age each person is turning.\n\n"
      "• The card border color shows urgency:\n"
@@ -660,6 +866,7 @@ def main(page: ft.Page):
         "filter":    "all",
         "rel":       "friend",
         "_rel_for":  None,   # tracks which edit_id loaded rel from DB
+        "photo":     "",     # foto temporal durante add/edit
     }
 
     def _play_birthday_sound(debug=False):
@@ -725,6 +932,27 @@ def main(page: ft.Page):
             if debug: _toast("OK — playing!")
         except Exception as ex:
             if debug: _toast(f"ERROR: {ex}")
+
+    # ── Avatar helper ─────────────────────────────────────────────────────
+    def _avatar(photo, name, relation, size=44):
+        """Círculo con foto o con inicial del nombre según disponibilidad."""
+        r = size // 2
+        if photo and os.path.exists(photo):
+            return ft.Image(
+                src=photo, width=size, height=size,
+                border_radius=r, fit=ft.BoxFit.COVER,
+            )
+        initial = (name[0].upper() if name else "?")
+        return ft.Container(
+            width=size, height=size, border_radius=r,
+            bgcolor=rel_color(relation),
+            content=ft.Text(
+                initial, size=int(size / 2.4),
+                color="#ffffff", weight=ft.FontWeight.BOLD,
+                text_align=ft.TextAlign.CENTER,
+            ),
+            alignment=ft.Alignment.CENTER,
+        )
 
     # ── Border helper (same pattern as ElBartenderMovil) ─────────────────
     def _bdr(width, color):
@@ -813,7 +1041,8 @@ def main(page: ft.Page):
         )
 
     def _contact_card(row, on_click=None):
-        cid, name, day, month, year, phone, email, notes, relation = row
+        cid, name, day, month, year, phone, email, notes, relation = row[:9]
+        photo = row[9] if len(row) > 9 else ""
         d_left = days_until(day, month)
         age    = calc_age(day, month, year)
         rc     = rel_color(relation)
@@ -842,8 +1071,7 @@ def main(page: ft.Page):
 
         return ft.Container(
             content=ft.Row([
-                ft.Text(rel_icon(relation), size=26, width=44,
-                        text_align=ft.TextAlign.CENTER),
+                _avatar(photo, name, relation, size=44),
                 ft.Column([
                     # FIX: max_lines=1 + overflow instead of no_wrap=True
                     ft.Text(name, size=14, color=rc, weight=ft.FontWeight.BOLD,
@@ -994,6 +1222,7 @@ def main(page: ft.Page):
             elif scr == "calendar": _show_calendar()
             elif scr == "settings": _show_settings()
             elif scr == "help":     _show_help()
+            elif scr == "stats":    _show_stats()
         except Exception:
             import traceback
             err = traceback.format_exc()
@@ -1126,15 +1355,18 @@ def main(page: ft.Page):
         row = db.get_contact(state["edit_id"]) if editing else None
 
         if editing and row:
-            _, nv, dv, mv, yv, pv, ev, ov, relation = row
+            _, nv, dv, mv, yv, pv, ev, ov, relation = row[:9]
+            photo_db    = row[9]  if len(row) > 9  else ""
+            gift_note_v = row[10] if len(row) > 10 else ""
             # Solo cargar del DB la primera vez que se entra a este edit_id.
             # En re-renders (al pulsar un botón de relación) NO sobreescribir,
             # para que el cambio del usuario se mantenga.
             if state["_rel_for"] != state["edit_id"]:
-                state["rel"] = relation
+                state["rel"]   = relation
+                state["photo"] = photo_db
                 state["_rel_for"] = state["edit_id"]
         else:
-            nv = dv = mv = yv = pv = ev = ov = ""
+            nv = dv = mv = yv = pv = ev = ov = gift_note_v = ""
             relation = state.get("rel", "friend")
 
         page.appbar = _appbar(
@@ -1143,12 +1375,14 @@ def main(page: ft.Page):
         )
         page.navigation_bar = _nav_bar("add")
 
-        (col_name,  tf_name)  = _field(t("field_name"),  str(nv or ""), t("field_name"))
-        (col_phone, tf_phone) = _field(t("field_phone"), str(pv or ""), "+1-809-...",
-                                       keyboard_type=ft.KeyboardType.PHONE)
-        (col_email, tf_email) = _field(t("field_email"), str(ev or ""), "email@...",
-                                       keyboard_type=ft.KeyboardType.EMAIL)
-        (col_notes, tf_notes) = _field(t("field_notes"), str(ov or ""), "...", multiline=True)
+        (col_name,      tf_name)      = _field(t("field_name"),  str(nv or ""), t("field_name"))
+        (col_phone,     tf_phone)     = _field(t("field_phone"), str(pv or ""), "+1-809-...",
+                                               keyboard_type=ft.KeyboardType.PHONE)
+        (col_email,     tf_email)     = _field(t("field_email"), str(ev or ""), "email@...",
+                                               keyboard_type=ft.KeyboardType.EMAIL)
+        (col_notes,     tf_notes)     = _field(t("field_notes"), str(ov or ""), "...", multiline=True)
+        (col_gift_note, tf_gift_note) = _field(t("field_gift"),  str(gift_note_v or ""),
+                                               t("gift_hint"), multiline=True)
 
         _dd_style = dict(
             bgcolor=C["bg3"],
@@ -1202,33 +1436,103 @@ def main(page: ft.Page):
 
         err_lbl = ft.Text("", color=C["red"], size=12)
 
+        # ── Bloque de foto ───────────────────────────────────────────────
+        photo_lbl = ft.Text(t("field_photo"), size=11, color=C["t2"],
+                            weight=ft.FontWeight.W_600)
+        _cur_photo = state["photo"]   # foto activa en este formulario
+
+        # El avatar se construye a partir del photo_container mutable
+        _photo_ctrl = [_avatar(_cur_photo, (nv or "?"), state.get("rel", "friend"), size=70)]
+
+        def _refresh_photo_display():
+            photo_wrap.content = _photo_ctrl[0]
+            try:
+                photo_wrap.update()
+            except Exception:
+                page.update()
+
+        photo_wrap = ft.Container(
+            content=_photo_ctrl[0],
+            alignment=ft.Alignment.CENTER,
+        )
+
+        def pick_photo(e):
+            files = img_picker.pick_files(
+                file_type=ft.FilePickerFileType.IMAGE,
+                allow_multiple=False,
+            )
+            if files:
+                try:
+                    stored = _copy_photo(files[0].path)
+                    state["photo"] = stored
+                    _photo_ctrl[0] = _avatar(stored, tf_name.value or "?",
+                                             state.get("rel", "friend"), size=70)
+                    _refresh_photo_display()
+                except Exception as ex:
+                    _toast(f"Error: {ex}")
+
+        def remove_photo(e):
+            state["photo"] = ""
+            _photo_ctrl[0] = _avatar("", tf_name.value or "?",
+                                     state.get("rel", "friend"), size=70)
+            _refresh_photo_display()
+
+        photo_btns = ft.Row([
+            ft.TextButton(
+                t("photo_add") if not state["photo"] else t("photo_change"),
+                on_click=pick_photo,
+                style=ft.ButtonStyle(color=C["cyan"]),
+            ),
+            ft.TextButton(
+                t("photo_remove"),
+                on_click=remove_photo,
+                style=ft.ButtonStyle(color=C["t3"]),
+            ) if state["photo"] else ft.Container(width=0),
+        ], spacing=4, alignment=ft.MainAxisAlignment.CENTER)
+
+        photo_block = ft.Column([
+            photo_lbl,
+            ft.Container(
+                content=ft.Row([photo_wrap, photo_btns], spacing=12,
+                               vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                bgcolor=C["bg3"], border_radius=10,
+                padding=ft.Padding(left=12, top=10, right=12, bottom=10),
+            ),
+        ], spacing=4)
+
         def on_save(e):
-            n  = (tf_name.value  or "").strip()
-            ds = (dd_day.value   or "").strip()
-            ms = (dd_month.value or "").strip()
-            ys = (dd_year.value  or "").strip()
-            ph = (tf_phone.value or "").strip()
-            em = (tf_email.value or "").strip()
-            no = (tf_notes.value or "").strip()
+            n  = (tf_name.value      or "").strip()
+            ds = (dd_day.value       or "").strip()
+            ms = (dd_month.value     or "").strip()
+            ys = (dd_year.value      or "").strip()
+            ph = (tf_phone.value     or "").strip()
+            em = (tf_email.value     or "").strip()
+            no = (tf_notes.value     or "").strip()
+            gn = (tf_gift_note.value or "").strip()
+            fp = state.get("photo", "")
             err_lbl.value = ""
             if not n:
                 err_lbl.value = t("err_name"); page.update(); return
             if not ds or not ms:
                 err_lbl.value = t("err_date"); page.update(); return
-            d, m = int(ds), int(ms)   # dropdowns only produce valid integers
+            d, m = int(ds), int(ms)
             y = int(ys) if ys.isdigit() else None
             if editing:
-                db.update(state["edit_id"], n, d, m, y, ph, em, no, state["rel"])
+                db.update(state["edit_id"], n, d, m, y, ph, em, no,
+                          state["rel"], photo=fp, gift_note=gn)
             else:
-                db.add(n, d, m, y, ph, em, no, state["rel"])
+                db.add(n, d, m, y, ph, em, no, state["rel"],
+                       photo=fp, gift_note=gn)
             state["edit_id"] = None
-            state["rel"] = "friend"
+            state["rel"]     = "friend"
+            state["photo"]   = ""
             state["_rel_for"] = None
             navigate("home")
 
         def on_cancel(e):
             state["edit_id"] = None
-            state["rel"] = "friend"
+            state["rel"]     = "friend"
+            state["photo"]   = ""
             state["_rel_for"] = None
             navigate("home")
 
@@ -1236,8 +1540,9 @@ def main(page: ft.Page):
             def do_del(e2):
                 page.pop_dialog()
                 db.delete(state["edit_id"])
-                state["edit_id"] = None
-                state["rel"] = "friend"
+                state["edit_id"]  = None
+                state["rel"]      = "friend"
+                state["photo"]    = ""
                 state["_rel_for"] = None
                 navigate("home")
             dlg = ft.AlertDialog(
@@ -1295,7 +1600,8 @@ def main(page: ft.Page):
                         weight=ft.FontWeight.W_600),
                 rel_row,
             ], spacing=4),
-            col_phone, col_email, col_notes,
+            col_phone, col_email, col_notes, col_gift_note,
+            photo_block,
             err_lbl,
             btn_row,
         ]
@@ -1326,7 +1632,9 @@ def main(page: ft.Page):
         if not row:
             navigate("home"); return
 
-        _, name, day, month, year, phone, email, notes, relation = row
+        _, name, day, month, year, phone, email, notes, relation = row[:9]
+        photo     = row[9]  if len(row) > 9  else ""
+        gift_note = row[10] if len(row) > 10 else ""
         d_left = days_until(day, month)
         age    = calc_age(day, month, year)
         rc     = rel_color(relation)
@@ -1394,6 +1702,7 @@ def main(page: ft.Page):
             ("✉",         t("field_email"),    email),
             ("\U0001f464", t("field_relation"), t(f"rel_{relation}")),
             ("\U0001f4dd", t("field_notes"),    notes),
+            ("\U0001f381", t("field_gift"),     gift_note),
         ]:
             if not val:
                 continue
@@ -1410,11 +1719,11 @@ def main(page: ft.Page):
 
         items = [
             _card(ft.Column([
-                ft.Text(rel_icon(relation), size=42, text_align=ft.TextAlign.CENTER),
+                _avatar(photo, name, relation, size=80),
                 ft.Text(name, size=20, color=rc, weight=ft.FontWeight.BOLD,
                         text_align=ft.TextAlign.CENTER),
                 ft.Text(ds, size=13, color=C["t3"], text_align=ft.TextAlign.CENTER),
-            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=8),
             border_color=rc, padding=16),
             stats,
             *info_items,
@@ -1553,6 +1862,248 @@ def main(page: ft.Page):
         ))
 
     # ─────────────────────────────────────────────────────────────────────
+    # ─────────────────────────────────────────────────────────────────────
+    # STATS
+    # ─────────────────────────────────────────────────────────────────────
+    def _show_stats():
+        page.appbar = _appbar(
+            f"\U0001f4ca  {t('stats_title')}",
+            leading=ft.IconButton(
+                ft.Icons.ARROW_BACK, icon_color=C["cyan"],
+                on_click=lambda e: navigate("settings"),
+            ),
+        )
+        page.navigation_bar = None
+
+        rows = db.all_contacts()
+        today = date.today()
+
+        total = len(rows)
+        cnt_today = sum(1 for r in rows if days_until(r[2], r[3]) == 0)
+        cnt_week  = sum(1 for r in rows if 1 <= days_until(r[2], r[3]) <= 7)
+        cnt_month = sum(1 for r in rows if 8 <= days_until(r[2], r[3]) <= 30)
+
+        # Próximo cumpleaños
+        upcoming = sorted(
+            [r for r in rows if days_until(r[2], r[3]) > 0],
+            key=lambda r: days_until(r[2], r[3])
+        )
+        if upcoming:
+            nr  = upcoming[0]
+            nxt_txt = f"{nr[1]}  —  {days_until(nr[2], nr[3])} {t('stats_days')}"
+            nxt_col = C["green"]
+        else:
+            nxt_txt = t("stats_none")
+            nxt_col = C["t3"]
+
+        # Por relación
+        from collections import Counter
+        rel_count = Counter(r[8] for r in rows)
+        rel_labels = {"family": t("rel_family"), "friend": t("rel_friend"),
+                      "work":   t("rel_work"),   "other":  t("rel_other")}
+        rel_keys_order = ["family", "friend", "work", "other"]
+
+        # Distribución por mes
+        month_count = Counter(r[3] for r in rows)   # r[3] = month
+
+        # ── Cards de resumen (2x2) ───────────────────────────────────────
+        def _stat_card(val, lbl, col):
+            return _card(ft.Column([
+                ft.Text(str(val), size=28, color=col,
+                        weight=ft.FontWeight.BOLD,
+                        text_align=ft.TextAlign.CENTER),
+                ft.Text(lbl, size=10, color=C["t3"],
+                        text_align=ft.TextAlign.CENTER),
+            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+            padding=ft.Padding(left=8, top=10, right=8, bottom=10),
+            expand=True)
+
+        summary_row1 = ft.Row([
+            _stat_card(total,      t("stats_total"),      C["cyan"]),
+            _stat_card(cnt_today,  t("stats_today"),      C["pink"]),
+        ], spacing=8)
+        summary_row2 = ft.Row([
+            _stat_card(cnt_week,   t("stats_week"),       C["yellow"]),
+            _stat_card(cnt_month,  t("stats_month_sec"),  C["green"]),
+        ], spacing=8)
+
+        # ── Próximo cumpleaños ────────────────────────────────────────────
+        next_card = _card(ft.Row([
+            ft.Text("\U0001f382", size=24, width=36),
+            ft.Column([
+                ft.Text(t("stats_next"), size=10, color=C["t3"]),
+                ft.Text(nxt_txt, size=13, color=nxt_col,
+                        weight=ft.FontWeight.W_600),
+            ], spacing=2, expand=True),
+        ]), padding=ft.Padding(left=12, top=10, right=12, bottom=10))
+
+        # ── Por relación ─────────────────────────────────────────────────
+        rel_rows = []
+        for rk in rel_keys_order:
+            cnt = rel_count.get(rk, 0)
+            if cnt == 0:
+                continue
+            bar_val = cnt / max(total, 1)
+            rel_rows.append(ft.Row([
+                ft.Text(rel_icon(rk), size=18, width=28),
+                ft.Text(rel_labels[rk], size=12, color=C["t2"], width=72),
+                ft.ProgressBar(
+                    value=bar_val, expand=True,
+                    bar_height=12, border_radius=6,
+                    color=rel_color(rk), bgcolor=C["bg3"],
+                ),
+                ft.Text(str(cnt), size=12, color=C["t1"],
+                        weight=ft.FontWeight.BOLD, width=28,
+                        text_align=ft.TextAlign.RIGHT),
+            ], spacing=6, vertical_alignment=ft.CrossAxisAlignment.CENTER))
+
+        rel_card = _card(ft.Column([
+            ft.Text(t("stats_by_rel"), size=11, color=C["t2"],
+                    weight=ft.FontWeight.W_600),
+            ft.Divider(height=6, color="transparent"),
+            *rel_rows,
+        ], spacing=8), padding=ft.Padding(left=12, top=10, right=12, bottom=10))
+
+        # ── Distribución por mes ──────────────────────────────────────────
+        month_names_short = [m[:3] for m in T[LANG[0]]["months"][1:]]
+        max_mc = max(month_count.values(), default=1)
+        MAX_BAR_H = 56
+        month_bars = []
+        for i, mn in enumerate(month_names_short, start=1):
+            cnt = month_count.get(i, 0)
+            is_cur = (i == today.month)
+            bar_h = max(4, int(cnt / max(max_mc, 1) * MAX_BAR_H))
+            spacer_h = MAX_BAR_H - bar_h
+            bar_col = C["cyan"] if is_cur else C["violet"]
+            month_bars.append(ft.Column([
+                ft.Text(str(cnt) if cnt else " ", size=9,
+                        color=C["cyan"] if is_cur else C["t3"],
+                        text_align=ft.TextAlign.CENTER,
+                        weight=ft.FontWeight.BOLD if is_cur else ft.FontWeight.NORMAL),
+                ft.Container(height=spacer_h),          # empuja la barra hacia abajo
+                ft.Container(width=18, height=bar_h, border_radius=3, bgcolor=bar_col),
+                ft.Text(mn, size=8,
+                        color=C["cyan"] if is_cur else C["t3"],
+                        text_align=ft.TextAlign.CENTER,
+                        weight=ft.FontWeight.BOLD if is_cur else ft.FontWeight.NORMAL),
+            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+               spacing=1))
+
+        month_card = _card(ft.Column([
+            ft.Text(t("stats_by_month"), size=11, color=C["t2"],
+                    weight=ft.FontWeight.W_600),
+            ft.Divider(height=6, color="transparent"),
+            ft.Row(month_bars, spacing=4,
+                   alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+        ], spacing=4), padding=ft.Padding(left=12, top=10, right=12, bottom=10))
+
+        items = [
+            summary_row1, summary_row2,
+            next_card,
+            rel_card,
+            month_card,
+            _footer(),
+            ft.Container(height=16),
+        ]
+
+        page.add(ft.Column(
+            controls=[ft.Container(
+                content=ft.Column(items, spacing=10),
+                padding=ft.Padding(left=14, top=8, right=14, bottom=8),
+            )],
+            expand=True,
+            scroll=ft.ScrollMode.AUTO,
+        ))
+
+    # ── vCard import helpers ──────────────────────────────────────────────
+    def _show_vcf_review(contacts):
+        """Diálogo con checkboxes para seleccionar qué contactos vcf importar."""
+        checked = [True] * len(contacts)
+        cb_refs = []
+
+        for i, c in enumerate(contacts):
+            d, m, yr = c.get("day"), c.get("month"), c.get("year")
+            yr_txt   = f"  ({yr})" if yr else ""
+            date_txt = f"{d}/{m}{yr_txt}"
+            cb = ft.Checkbox(
+                label=f"{c['name']}  —  {date_txt}",
+                value=True,
+                on_change=lambda e, idx=i: checked.__setitem__(idx, e.control.value),
+                label_style=ft.TextStyle(color=C["t1"], size=12),
+                check_color=C["cyan"],
+                active_color=C["cyandim"],
+            )
+            cb_refs.append(cb)
+
+        def do_import_vcf(e):
+            selected = [contacts[i] for i in range(len(contacts)) if checked[i]]
+            if not selected:
+                _toast(t("import_vcf_empty"))
+                return
+            for c in selected:
+                db.add(
+                    c["name"], c["day"], c["month"], c.get("year"),
+                    c.get("phone", ""), "", "", "friend",
+                )
+            page.pop_dialog()
+            _toast(f"✓  {len(selected)} {t('import_vcf_ok')}")
+            render()
+
+        def sel_all(e):
+            for i, cb in enumerate(cb_refs):
+                cb.value = True
+                checked[i] = True
+            page.update()
+
+        def sel_none(e):
+            for i, cb in enumerate(cb_refs):
+                cb.value = False
+                checked[i] = False
+            page.update()
+
+        dlg = ft.AlertDialog(
+            modal=True,
+            bgcolor=C["bg2"],
+            title=ft.Text(
+                f"{len(contacts)} {t('import_vcf_found')}",
+                color=C["cyan"], weight=ft.FontWeight.BOLD, size=14,
+            ),
+            content=ft.Container(
+                content=ft.Column(cb_refs, scroll=ft.ScrollMode.AUTO, spacing=2),
+                height=320,
+                width=300,
+            ),
+            actions=[
+                ft.TextButton(t("import_vcf_all"),
+                              on_click=sel_all,
+                              style=ft.ButtonStyle(color=C["t2"])),
+                ft.TextButton(t("import_vcf_clear"),
+                              on_click=sel_none,
+                              style=ft.ButtonStyle(color=C["t2"])),
+                ft.TextButton(t("import_vcf_do"),
+                              on_click=do_import_vcf,
+                              style=ft.ButtonStyle(color=C["green"])),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+        page.show_dialog(dlg)
+
+    def _on_vcf_files(files):
+        """Procesa la lista de FilePickerFile devuelta por pick_files()."""
+        if not files:
+            return
+        try:
+            file_path = files[0].path
+            with open(file_path, "r", encoding="utf-8", errors="replace") as fh:
+                content = fh.read()
+            contacts = _parse_vcf(content)
+            if not contacts:
+                _toast(t("import_vcf_none"))
+                return
+            _show_vcf_review(contacts)
+        except Exception as ex:
+            _toast(f"Error: {ex}")
+
     # SETTINGS
     # ─────────────────────────────────────────────────────────────────────
     def _show_settings():
@@ -1682,10 +2233,22 @@ def main(page: ft.Page):
                 _btn(f"\U0001f4e5  {t('btn_import')}", C["yellow"],
                      on_click=do_import, expand=True),
             ], spacing=10),
+            _btn(f"\U0001f4f1  {t('import_vcf_btn')}", C["cyan"],
+                 on_click=lambda e: _on_vcf_files(
+                     vcf_picker.pick_files(
+                         allowed_extensions=["vcf"],
+                         dialog_title=t("import_vcf_title"),
+                     )
+                 ),
+                 expand=True),
 
-            # ── Manual ───────────────────────────────────────────────────
-            _btn(f"\U0001f4d6  {t('manual_btn')}", C["purple"],
-                 on_click=lambda e: navigate("help"), expand=True),
+            # ── Stats + Manual ────────────────────────────────────────────
+            ft.Row([
+                _btn(f"\U0001f4ca  {t('stats_btn')}", C["violet"],
+                     on_click=lambda e: navigate("stats"), expand=True),
+                _btn(f"\U0001f4d6  {t('manual_btn')}", C["purple"],
+                     on_click=lambda e: navigate("help"), expand=True),
+            ], spacing=10),
 
             # ── About ────────────────────────────────────────────────────
             _sec(t("about_title")),
@@ -1840,6 +2403,16 @@ def main(page: ft.Page):
         )
         _play_birthday_sound()
         page.show_dialog(dlg)
+
+    # ── File pickers (persisten en overlay entre renders) ─────────────────
+    # Container(visible=False) → Flutter Offstage: el control existe en el
+    # árbol (pick_files funciona) pero no se renderiza → sin barra roja.
+    vcf_picker = ft.FilePicker()
+    img_picker = ft.FilePicker()
+    page.overlay.extend([
+        ft.Container(content=vcf_picker, visible=False),
+        ft.Container(content=img_picker, visible=False),
+    ])
 
     # ── Initial render ────────────────────────────────────────────────────
     render()

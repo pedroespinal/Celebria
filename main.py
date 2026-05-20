@@ -24,7 +24,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.2.9"
+APP_VERSION = "1.3.0"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -2531,7 +2531,9 @@ def main(page: ft.Page):
                     f"Debes actualizar a v{new_ver} para continuar usando Celebria."
                     if forced else
                     f"Celebria v{new_ver} ya está disponible.\n"
-                    f"Tienes instalada la v{APP_VERSION}."
+                    f"Tienes instalada la v{APP_VERSION}.\n\n"
+                    f"📥 Al terminar la descarga, toca el archivo APK\n"
+                    f"en la barra de notificaciones para instalarlo."
                 )
                 btn_later = "Ahora no"
                 btn_dl    = "⬇  Descargar"
@@ -2543,7 +2545,9 @@ def main(page: ft.Page):
                     f"You must update to v{new_ver} to keep using Celebria."
                     if forced else
                     f"Celebria v{new_ver} is now available.\n"
-                    f"You have v{APP_VERSION} installed."
+                    f"You have v{APP_VERSION} installed.\n\n"
+                    f"📥 When the download finishes, tap the APK file\n"
+                    f"in your notifications to install it."
                 )
                 btn_later = "Not now"
                 btn_dl    = "⬇  Download"

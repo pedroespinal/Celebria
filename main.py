@@ -24,7 +24,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.3.1"
+APP_VERSION = "1.3.2"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -2557,11 +2557,15 @@ def main(page: ft.Page):
                     on_click=lambda e: page.pop_dialog(),
                     style=ft.ButtonStyle(color=C["t3"]),
                 ))
-            # url= usa Flutter url_launcher (funciona en Android 11+)
-            # page.launch_url() falla silenciosamente en Android 11+
+            # Abre la página de releases (no la URL directa del APK).
+            # La URL directa del APK puede quedar "atascada" en Chrome Android
+            # porque GitHub no cierra la conexión correctamente.
+            # La página de releases descarga el APK con el flujo normal de
+            # Chrome y muestra "Abrir / Open" al terminar.
+            releases_page = f"https://github.com/{GITHUB_REPO}/releases/tag/v{new_ver}"
             actions.append(ft.TextButton(
                 btn_dl,
-                url=dl_url,
+                url=releases_page,
                 on_click=lambda e: page.pop_dialog(),
                 style=ft.ButtonStyle(color=dl_color),
             ))
@@ -2599,7 +2603,12 @@ def main(page: ft.Page):
                 cur = _ver_tuple(APP_VERSION)
                 if _ver_tuple(latest) > cur:
                     forced = _ver_tuple(minimum) > cur
-                    _show_update_dialog(latest, dl_url, forced=forced)
+                    # Despachar al event loop de Flet (no llamar desde hilo de fondo
+                    # directamente — causa que el diálogo aparezca tarde o en la
+                    # siguiente pantalla en vez de en Home).
+                    async def _show_on_main(lv=latest, du=dl_url, fv=forced):
+                        _show_update_dialog(lv, du, forced=fv)
+                    page.run_task(_show_on_main)
             except Exception:
                 pass  # sin conexión → silencioso
 

@@ -24,7 +24,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.2.1"
+APP_VERSION = "1.2.2"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -77,7 +77,7 @@ T = {
         "nav_settings":   "Config",
         "today_title":    "\U0001f382  ¡Hoy!",
         "week_title":     "\U0001f4c5  Esta Semana",
-        "month_title":    "\U0001f5d3  Este Mes",
+        "month_title":    "\U0001f5d3  Próximamente",
         "all_title":      "\U0001f465  Todos",
         "no_contacts":    "Sin contactos aún.\nPresiona + para agregar.",
         "add_title":      "Nuevo Contacto",
@@ -170,7 +170,7 @@ T = {
         "stats_total":      "Total de contactos",
         "stats_today":      "Cumplen hoy",
         "stats_week":       "Esta semana",
-        "stats_month_sec":  "Este mes",
+        "stats_month_sec":  "Próximamente",
         "stats_by_rel":     "Por relación",
         "stats_by_month":   "Distribución por mes",
         "stats_next":       "Próximo cumpleaños",
@@ -186,7 +186,7 @@ T = {
         "nav_settings":   "Settings",
         "today_title":    "\U0001f382  Today!",
         "week_title":     "\U0001f4c5  This Week",
-        "month_title":    "\U0001f5d3  This Month",
+        "month_title":    "\U0001f5d3  Coming Soon",
         "all_title":      "\U0001f465  All",
         "no_contacts":    "No contacts yet.\nPress + to add one.",
         "add_title":      "New Contact",
@@ -279,7 +279,7 @@ T = {
         "stats_total":      "Total contacts",
         "stats_today":      "Birthdays today",
         "stats_week":       "This week",
-        "stats_month_sec":  "This month",
+        "stats_month_sec":  "Coming Soon",
         "stats_by_rel":     "By relationship",
         "stats_by_month":   "Birthday distribution by month",
         "stats_next":       "Next birthday",
@@ -608,7 +608,7 @@ _HELP_ES = [
      "Los contactos aparecen agrupados automáticamente:\n"
      "  \U0001f382 ¡Hoy! — cumpleaños de hoy\n"
      "  \U0001f4c5 Esta Semana — próximos 7 días\n"
-     "  \U0001f5d3 Este Mes — próximos 30 días\n"
+     "  \U0001f5d3 Próximamente — próximos 8–30 días\n"
      "  \U0001f465 Todos — el resto del año"),
     ("\U0001f514", "Notificaciones automáticas",
      "Celebria revisa los cumpleaños cada vez que abres la app y muestra "
@@ -736,7 +736,7 @@ _HELP_EN = [
      "Contacts are automatically grouped by:\n"
      "  \U0001f382 Today! — today's birthdays\n"
      "  \U0001f4c5 This Week — next 7 days\n"
-     "  \U0001f5d3 This Month — next 30 days\n"
+     "  \U0001f5d3 Coming Soon — next 8–30 days\n"
      "  \U0001f465 All — the rest of the year"),
     ("\U0001f514", "Automatic notifications",
      "Celebria checks birthdays every time you open the app and shows "

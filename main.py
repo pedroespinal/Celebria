@@ -24,7 +24,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.3.0"
+APP_VERSION = "1.3.1"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -2325,10 +2325,6 @@ def main(page: ft.Page):
                 ft.Text(t("app_sub"),   size=11, color=C["t2"]),
                 ft.Text(f"© {APP_YEAR}  {APP_AUTHOR}", size=11, color=C["t2"]),
                 ft.Text(t("rights"),    size=10, color=C["t3"]),
-                ft.Text(
-                    f"{t('created_by')}: {APP_AUTHOR}   ·   {t('rights')}   ©{APP_YEAR}",
-                    size=9, color=C["t3"],
-                ),
             ], spacing=4)),
 
             _footer(),

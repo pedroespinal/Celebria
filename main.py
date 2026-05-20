@@ -24,7 +24,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.2.3"
+APP_VERSION = "1.2.4"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -176,6 +176,7 @@ T = {
         "stats_next":       "Próximo cumpleaños",
         "stats_none":       "Sin contactos",
         "stats_days":       "días",
+        "mobile_only":      "📱 Función disponible solo en Android",
     },
     "en": {
         "app_sub":        "Birthday Reminder",
@@ -285,6 +286,7 @@ T = {
         "stats_next":       "Next birthday",
         "stats_none":       "No contacts yet",
         "stats_days":       "days",
+        "mobile_only":      "📱 Feature available on Android only",
     },
 }
 
@@ -1456,6 +1458,9 @@ def main(page: ft.Page):
         )
 
         async def pick_photo(e):
+            if not _is_android:
+                _toast(t("mobile_only"))
+                return
             files = await img_picker.pick_files(
                 file_type=ft.FilePickerFileType.IMAGE,
                 allow_multiple=False,
@@ -2089,6 +2094,9 @@ def main(page: ft.Page):
 
     async def _do_vcf_import(e):
         """Abre el selector de archivos .vcf y procesa el resultado."""
+        if not _is_android:
+            _toast(t("mobile_only"))
+            return
         files = await vcf_picker.pick_files(
             allowed_extensions=["vcf"],
             dialog_title=t("import_vcf_title"),
@@ -2402,13 +2410,15 @@ def main(page: ft.Page):
         _play_birthday_sound()
         page.show_dialog(dlg)
 
-    # ── File pickers (Service controls — van directo en page.overlay) ─────
-    # pick_files() es async en Flet 0.85.1 — los handlers usan async/await.
-    # La barra roja "Unknown control" solo aparece en desktop runner,
-    # NO en el APK compilado donde Flutter conoce FilePicker nativamente.
+    # ── File pickers (Service controls) ──────────────────────────────────
+    # Solo se registran en Android: en desktop runner causan barra roja
+    # "Unknown control: FilePicker" que bloquea la pantalla.
+    # En el APK compilado page.platform == ANDROID → se registran normalmente.
+    _is_android = (page.platform == ft.PagePlatform.ANDROID)
     vcf_picker = ft.FilePicker()
     img_picker = ft.FilePicker()
-    page.overlay.extend([vcf_picker, img_picker])
+    if _is_android:
+        page.overlay.extend([vcf_picker, img_picker])
 
     # ── Initial render ────────────────────────────────────────────────────
     render()

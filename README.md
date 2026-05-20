@@ -5,7 +5,7 @@
 Celebria es una app Android personal para nunca olvidar un cumpleaños.  
 Diseño futurista oscuro, bilingüe ES/EN, sin publicidad y sin conexión requerida para su uso principal.
 
-[![Versión](https://img.shields.io/badge/versión-1.0.8-00e5ff?style=flat-square)](https://github.com/pedroespinal/Celebria/releases/latest)
+[![Versión](https://img.shields.io/badge/versión-1.2.2-00e5ff?style=flat-square)](https://github.com/pedroespinal/Celebria/releases/latest)
 [![Plataforma](https://img.shields.io/badge/plataforma-Android-00ff88?style=flat-square)](https://github.com/pedroespinal/Celebria/releases/latest)
 [![Python](https://img.shields.io/badge/Python-3-yellow?style=flat-square)](https://www.python.org/)
 [![Flet](https://img.shields.io/badge/Flet-0.85.1-7c3aed?style=flat-square)](https://flet.dev/)
@@ -27,8 +27,11 @@ Diseño futurista oscuro, bilingüe ES/EN, sin publicidad y sin conexión requer
 
 - 🎂 Popup de felicitación al abrir la app el día del cumpleaños, con melodía festiva generada en memoria
 - 👥 Contactos con nombre, fecha, teléfono, email, notas y tipo de relación (Familia / Amigo / Trabajo / Otro)
-- 📊 Countdown de días, cálculo de edad exacta, íconos y colores por relación
-- 📋 Secciones automáticas: **Hoy · Esta Semana · Este Mes · Todos**
+- 📸 **Foto por contacto** — avatar personalizado o círculo con inicial en el color de la relación
+- 🎁 **Nota de regalo** — guarda ideas de regalo por contacto
+- 📊 **Estadísticas rápidas** — resumen total, cumpleaños próximos, distribución por relación y por mes
+- 📱 **Importar desde Agenda** — lee archivos `.vcf` y extrae contactos con cumpleaños registrados
+- 📋 Secciones automáticas: **Hoy · Esta Semana · Próximamente · Todos**
 - 🔍 Búsqueda en tiempo real (teclado siempre abierto) + filtro por tipo de relación
 - 📆 Calendario mensual con días de cumpleaños destacados
 - 💬 Botón WhatsApp directo por contacto
@@ -58,10 +61,11 @@ Diseño futurista oscuro, bilingüe ES/EN, sin publicidad y sin conexión requer
 
 ```
 C:\Celebria\
-├── main.py          # App completa en un solo archivo (~1900 líneas)
+├── main.py          # App completa en un solo archivo (~2520 líneas)
 ├── requirements.txt # flet-audio==0.85.1
 ├── version.json     # Control de versiones para actualizaciones in-app
 ├── release.ps1      # Script de release completamente automatizado
+├── test.ps1         # Script de prueba local en modo escritorio
 ├── README.md        # Este archivo
 └── .gitignore
 ```
@@ -80,8 +84,8 @@ $env:PYTHONUTF8      = "1"
 $env:NO_COLOR        = "1"
 chcp 65001
 
-flet build apk
-# APK generado en: build\apk\Celebria.apk
+flet build apk --artifact "Celebria-X.Y.Z"
+# APK generado en: build\apk\Celebria-X.Y.Z.apk
 ```
 
 ---
@@ -90,16 +94,19 @@ flet build apk
 
 ```powershell
 .\release.ps1 -Version "X.Y.Z" -Notes "Descripción del cambio"
+
+# Omitir prueba local (si ya se probó manualmente):
+.\release.ps1 -Version "X.Y.Z" -Notes "Descripción" -SkipTest
 ```
 
 El script hace todo automáticamente en 6 pasos:
 
-1. Actualiza `APP_VERSION` en `main.py`
-2. Actualiza `version.json` (`latest` + `download_url`)
-3. Compila el APK con `flet build apk`
-4. Hace `git commit` + `git tag` + `git push` a GitHub
-5. Crea el release en GitHub vía API
-6. Sube el APK como asset del release
+1. Prueba local — abre la app en escritorio para verificar antes de compilar
+2. Actualiza `APP_VERSION` en `main.py`
+3. Actualiza `version.json` (`latest` + `download_url`)
+4. Compila el APK con `flet build apk --artifact "Celebria-X.Y.Z"`
+5. Hace `git commit` + `git tag` + `git push` a GitHub
+6. Crea el release en GitHub vía API y sube el APK como asset
 
 > Requiere token OAuth de GitHub almacenado en Windows Credential Manager  
 > bajo la clave `git:https://github.com`
@@ -112,9 +119,9 @@ La app lee `version.json` al arrancar para verificar si hay una versión nueva:
 
 ```json
 {
-  "latest":       "1.0.8",
+  "latest":       "1.2.0",
   "minimum":      "1.0.0",
-  "download_url": "https://github.com/pedroespinal/Celebria/releases/download/v1.0.8/Celebria-v1.0.8.apk"
+  "download_url": "https://github.com/pedroespinal/Celebria/releases/download/v1.2.0/Celebria-v1.2.0.apk"
 }
 ```
 
@@ -137,8 +144,11 @@ No requiere recompilar la app.
 ## ⚠ Quirks conocidos
 
 - `flet build apk` requiere `chcp 65001` + `NO_COLOR=1` en Windows para evitar crash de Unicode por la librería `rich`
-- `flet_audio` se envuelve en `Container(visible=False)` → Flutter usa `Offstage`: el audio funciona pero el control no se renderiza (evita la barra roja de error)
+- Controles de servicio (`flet_audio`, `FilePicker`) se envuelven en `Container(visible=False)` → Flutter usa `Offstage`: el control funciona pero no se renderiza (evita la barra roja de error en desktop)
 - Los links externos (WhatsApp, descarga de APK) usan la propiedad `url=` del Container en vez de `page.launch_url()` para compatibilidad con Android 11+
+- `page.launch_url()` falla silenciosamente si se llama desde un hilo secundario (`threading.Timer`); debe llamarse desde el event handler de Flet
+- En Flet 0.85.1, `FilePicker.pick_files()` es **sincrónico** — devuelve `list[FilePickerFile]` directamente; `ft.FilePickerResultEvent` no existe en esta versión
+- Las fotos de contactos se almacenan en `~/.celebria/photos/` (desktop) o `FLET_APP_STORAGE_DATA/photos/` (Android)
 
 ---
 

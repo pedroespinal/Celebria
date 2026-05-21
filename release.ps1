@@ -41,7 +41,7 @@ $TOKEN = $cred[1]
 $HDRS  = @{ Authorization = "token $TOKEN"; Accept = "application/vnd.github+json" }
 $REPO  = "pedroespinal/Celebria"
 $TAG   = "v$Version"
-$APK   = "C:\Celebria\build\apk\Celebria.apk"
+$APK   = "C:\Celebria\build\apk\Celebria-$Version.apk"
 
 Write-Host ""
 Write-Host "=== Celebria Release $TAG ===" -ForegroundColor Cyan
@@ -102,7 +102,7 @@ $env:PYTHONIOENCODING = "utf-8"
 $env:PYTHONUTF8 = "1"
 $env:NO_COLOR = "1"
 chcp 65001 | Out-Null
-flet build apk 2>&1 | Out-Null
+flet build apk --artifact "Celebria-$Version" 2>&1 | Out-Null
 if (-not (Test-Path $APK)) { Write-Error "Fallo la compilacion - APK no encontrado."; exit 1 }
 $sizeMB = [math]::Round((Get-Item $APK).Length / 1MB, 1)
 Write-Host "      OK - $sizeMB MB"
@@ -110,7 +110,7 @@ Write-Host "      OK - $sizeMB MB"
 # -- 3. Commit y tag en git ---------------------------------------------------
 Write-Host ""
 Write-Host "[3/6] Commit y tag git..."
-git add main.py version.json *>&1 | Out-Null
+git add main.py version.json assets/icon.png *>&1 | Out-Null
 git commit -m "Celebria $TAG - $Notes" *>&1 | Out-Null
 git tag $TAG *>&1 | Out-Null
 git push origin main --tags *>&1 | Out-Null
@@ -119,20 +119,56 @@ Write-Host "      OK - commit + tag $TAG pusheados"
 # -- 4. Crear release en GitHub -----------------------------------------------
 Write-Host ""
 Write-Host "[4/6] Creando release en GitHub..."
+
+$installGuide = @"
+## Novedades / What's new
+$Notes
+
+---
+
+## Instalacion por primera vez / First-time install
+
+> **Android no permite instalar apps fuera de la Play Store por defecto — es normal y seguro seguir estos pasos.**
+
+1. Descarga el archivo **Celebria-$TAG.apk** (boton verde arriba 👆)
+2. Cuando Chrome termine de descargar, toca **Abrir**
+3. Si Android muestra *"No se permite instalar de esta fuente"*:
+   - Toca **Configuracion** en ese aviso
+   - Activa **Permitir de esta fuente**
+   - Regresa y toca **INSTALAR**
+4. Si aparece un aviso de Play Protect, toca **Instalar de todas formas**
+5. Toca **ABRIR** — listo!
+
+---
+
+## Actualizar desde una version anterior / Updating
+
+1. Abre Celebria — el aviso de actualizacion aparece automaticamente
+2. Toca **Descargar** en el aviso
+3. Sigue los mismos pasos de instalacion de arriba (tus contactos NO se borran)
+
+---
+
+## Requisitos / Requirements
+- Android 5.0 o superior
+- ~70 MB de espacio libre
+- Sin cuenta requerida — funciona completamente sin internet (excepto para actualizaciones)
+"@
+
 $bodyObj = @{
     tag_name         = $TAG
     target_commitish = "main"
     name             = "Celebria $TAG"
-    body             = $Notes
+    body             = $installGuide
     draft            = $false
     prerelease       = $false
 }
-$bodyJson = $bodyObj | ConvertTo-Json -Compress
+$bodyBytes = [System.Text.Encoding]::UTF8.GetBytes(($bodyObj | ConvertTo-Json -Compress))
 
 $rel = $null
 try {
     $resp = Invoke-WebRequest -Uri "https://api.github.com/repos/$REPO/releases" `
-        -Method POST -Headers $HDRS -Body $bodyJson -ContentType "application/json" `
+        -Method POST -Headers $HDRS -Body $bodyBytes -ContentType "application/json; charset=utf-8" `
         -UseBasicParsing
     $rel = $resp.Content | ConvertFrom-Json
     Write-Host "      OK - $($rel.html_url)"

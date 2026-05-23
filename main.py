@@ -24,7 +24,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.4.3"
+APP_VERSION = "1.4.4"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -971,11 +971,18 @@ def main(page: ft.Page):
             if debug: _toast("Sonido OFF en ajustes / Sound OFF in settings")
             return
         try:
-            import tempfile, threading
+            import threading
             if _WAV_CACHE[0] is None:
                 _WAV_CACHE[0] = _gen_birthday_wav()
-            fd, wav_path = tempfile.mkstemp(suffix=".wav")
-            with os.fdopen(fd, "wb") as f:
+            # Use app storage dir on Android (guaranteed accessible to Flutter
+            # audio player). Fall back to system temp on desktop.
+            _storage = os.environ.get("FLET_APP_STORAGE_DATA", "")
+            if _storage:
+                wav_path = os.path.join(_storage, "celebria_chime.wav")
+            else:
+                import tempfile
+                wav_path = os.path.join(tempfile.gettempdir(), "celebria_chime.wav")
+            with open(wav_path, "wb") as f:
                 f.write(_WAV_CACHE[0])
 
             snd_holder: list = [None]
@@ -2691,10 +2698,19 @@ def main(page: ft.Page):
         except Exception:
             pass
 
-    # Birthday popup (respects show_popup setting)
+    # Birthday popup — MUST delay before showing dialog on Android.
+    # Flutter needs ~1-2 s after render() to fully build the widget tree
+    # and initialize the Overlay/Scaffold. Calling page.show_dialog()
+    # without a delay causes it to fail silently on Android (no popup,
+    # no error — same root cause as the update dialog race condition).
+    # asyncio.sleep() yields control without blocking the event loop.
+    import asyncio
     today_contacts = [c for c in db.all_contacts() if days_until(c[2], c[3]) == 0]
     if today_contacts and db.get("show_popup", "1") == "1":
-        _birthday_popup(today_contacts)
+        async def _show_birthday_on_main(tc=today_contacts):
+            await asyncio.sleep(2.0)   # wait for Flutter Overlay to be ready
+            _birthday_popup(tc)
+        page.run_task(_show_birthday_on_main)
 
     # ── Update checker — corre en segundo plano, no bloquea la UI ─────────
     def _check_for_update():

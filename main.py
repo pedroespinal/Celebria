@@ -24,7 +24,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.4.4"
+APP_VERSION = "1.4.5"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -2698,19 +2698,22 @@ def main(page: ft.Page):
         except Exception:
             pass
 
-    # Birthday popup — MUST delay before showing dialog on Android.
-    # Flutter needs ~1-2 s after render() to fully build the widget tree
-    # and initialize the Overlay/Scaffold. Calling page.show_dialog()
-    # without a delay causes it to fail silently on Android (no popup,
-    # no error — same root cause as the update dialog race condition).
-    # asyncio.sleep() yields control without blocking the event loop.
-    import asyncio
+    # Birthday popup — delay via threading.Timer (same pattern as update dialog).
+    # page.show_dialog() fails silently on Android if called immediately after
+    # render() — Flutter's Overlay/Scaffold isn't ready yet.
+    # threading.Timer fires from a background thread after 2 s, then uses
+    # page.run_task() to dispatch to Flet's event loop — identical to how
+    # the update checker shows its dialog, which is proven to work.
+    import threading as _threading
     today_contacts = [c for c in db.all_contacts() if days_until(c[2], c[3]) == 0]
     if today_contacts and db.get("show_popup", "1") == "1":
-        async def _show_birthday_on_main(tc=today_contacts):
-            await asyncio.sleep(2.0)   # wait for Flutter Overlay to be ready
-            _birthday_popup(tc)
-        page.run_task(_show_birthday_on_main)
+        def _fire_birthday_popup(tc=today_contacts):
+            async def _show():
+                _birthday_popup(tc)
+            page.run_task(_show)
+        _bd_timer = _threading.Timer(2.5, _fire_birthday_popup)
+        _bd_timer.daemon = True
+        _bd_timer.start()
 
     # ── Update checker — corre en segundo plano, no bloquea la UI ─────────
     def _check_for_update():

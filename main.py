@@ -24,7 +24,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.4.5"
+APP_VERSION = "1.4.6"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -675,7 +675,9 @@ _HELP_ES = [
      "• Debajo del calendario verás la lista de cumpleaños del mes.\n\n"
      "Toca cualquier día resaltado para ir directamente al detalle\n"
      "del contacto. Si hay varios cumpleaños ese día, se mostrará\n"
-     "una lista para que elijas cuál quieres ver."),
+     "una lista para que elijas cuál quieres ver.\n\n"
+     "También puedes tocar cualquier nombre en la lista inferior\n"
+     "del mes para abrir directamente el detalle de ese contacto."),
     ("\U0001f4ac", "Botón de WhatsApp",
      "Si un contacto tiene número de teléfono guardado:\n\n"
      "1. Toca el contacto para abrir su detalle.\n"
@@ -830,7 +832,9 @@ _HELP_EN = [
      "• Below the calendar, see the complete list of birthdays for the month.\n\n"
      "Tap any highlighted day to go directly to that contact's detail view.\n"
      "If multiple contacts share the day, a list will appear so you can\n"
-     "pick which one to open."),
+     "pick which one to open.\n\n"
+     "You can also tap any contact name in the list below the calendar\n"
+     "to open their detail view directly."),
     ("\U0001f4ac", "WhatsApp button",
      "If a contact has a phone number saved:\n\n"
      "1. Tap the contact to open their detail view.\n"
@@ -1025,9 +1029,9 @@ def main(page: ft.Page):
             page.update()
 
             # Fallback: si on_state_change no dispara, limpiar a los 5 s
-            t = threading.Timer(5.0, _remove_snd)
-            t.daemon = True
-            t.start()
+            _cleanup_timer = threading.Timer(5.0, _remove_snd)
+            _cleanup_timer.daemon = True
+            _cleanup_timer.start()
 
             if debug: _toast("OK — playing!")
         except Exception as ex:
@@ -2002,8 +2006,11 @@ def main(page: ft.Page):
         month_items = []
         if month_contacts:
             month_items.append(_sec(f"\U0001f382  {month_name(m)}"))
+            def _open_month_contact(cid):
+                state["detail_id"] = cid
+                navigate("detail")
             for c in month_contacts:
-                month_items.append(_contact_card(c))
+                month_items.append(_contact_card(c, on_click=_open_month_contact))
 
         nav_row = ft.Row([
             ft.IconButton(ft.Icons.CHEVRON_LEFT,  on_click=prev_m,
@@ -2588,7 +2595,7 @@ def main(page: ft.Page):
             age = calc_age(day, month, year)
             _age_this_year = (date.today().year - year) if year else None
             _milestone = (_age_this_year in MILESTONE_AGES) if _age_this_year is not None else False
-            if age:
+            if age is not None:
                 line = f"{name}\n{t('popup_turns')} {age} {t('popup_years')} \U0001f382"
             else:
                 line = f"{name}  \U0001f382"
@@ -2701,9 +2708,12 @@ def main(page: ft.Page):
     # Birthday popup — delay via threading.Timer (same pattern as update dialog).
     # page.show_dialog() fails silently on Android if called immediately after
     # render() — Flutter's Overlay/Scaffold isn't ready yet.
-    # threading.Timer fires from a background thread after 2 s, then uses
-    # page.run_task() to dispatch to Flet's event loop — identical to how
-    # the update checker shows its dialog, which is proven to work.
+    # threading.Timer fires from a background thread, then uses page.run_task()
+    # to dispatch to Flet's event loop — identical to how the update checker
+    # shows its dialog, which is proven to work.
+    # 3.5 s gives Flutter's Overlay/Scaffold enough time to initialize AND
+    # gives the update-checker dialog time to appear first (if any), so both
+    # dialogs don't race to occupy the same slot simultaneously.
     import threading as _threading
     today_contacts = [c for c in db.all_contacts() if days_until(c[2], c[3]) == 0]
     if today_contacts and db.get("show_popup", "1") == "1":
@@ -2711,7 +2721,7 @@ def main(page: ft.Page):
             async def _show():
                 _birthday_popup(tc)
             page.run_task(_show)
-        _bd_timer = _threading.Timer(2.5, _fire_birthday_popup)
+        _bd_timer = _threading.Timer(3.5, _fire_birthday_popup)
         _bd_timer.daemon = True
         _bd_timer.start()
 

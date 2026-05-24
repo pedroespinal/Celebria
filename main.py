@@ -24,7 +24,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.4.20"
+APP_VERSION = "1.4.21"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -984,18 +984,19 @@ def main(page: ft.Page):
     }
 
     def _play_birthday_sound(debug=False):
-        """Reproduce el chime de cumpleaños usando el asset bundleado /chime.wav.
+        """Reproduce el chime de cumpleaños.
 
-        Estrategia v1.4.20:
-        - src="/chime.wav"  → Flet HTTP server interno sirve el asset a Flutter.
-          Sin file:// ni permisos de almacenamiento — funciona en Android 11+.
-        - FletAudio se agrega DIRECTAMENTE a page.overlay (sin Container wrapper).
-          Así Flet asigna .page correctamente al control y el widget queda montado.
-        - autoplay=True  → Flutter dispara el audio al montar el widget.
-          No se llama snd.play() desde Python (evita el problema async sin await).
-        - page.run_task(_do_play) schedula la coroutine DESPUÉS de que el handler
-          UI actual retorna — la pantalla birthday ya está estable cuando se agrega
-          el widget al overlay, sin conflicto con el rebuild de page.controls.
+        Estrategia v1.4.21:
+        - src=bytes  → audioplayers.setSourceBytes() — sin HTTP server, sin file://,
+          sin permisos de almacenamiento.  Funciona en todos los Android.
+        - page._services.register_service(snd) → forma correcta de montar un
+          ft.Service en Flet 0.85.1.  page.overlay es para controles visuales,
+          no para servicios.
+        - on_loaded callback → snd.play() se llama DESPUÉS de que audioplayers
+          confirma que los bytes están cargados.  Más confiable que autoplay=True,
+          que puede dispararse antes de que el source esté listo.
+        - Fallback: si _services falla, 1px Container transparente en overlay —
+          mantiene el widget montado (visible=False lo desmontaría, ver quirk).
         """
         if not _AUDIO_AVAILABLE:
             if debug: _toast("flet_audio no disponible / not available")
@@ -1006,14 +1007,35 @@ def main(page: ft.Page):
 
         async def _do_play():
             try:
-                # Limpiar widgets FletAudio anteriores del overlay (evita acumulación)
-                page.overlay[:] = [c for c in page.overlay
-                                   if not isinstance(c, FletAudio)]
-                # Crear widget fresco con asset path — Flet HTTP server lo sirve
-                snd = FletAudio(src="/chime.wav", autoplay=True, volume=1.0)
-                page.overlay.append(snd)   # directamente, sin Container wrapper
+                # Limpiar widgets FletAudio del overlay (tanto directos como en Container)
+                page.overlay[:] = [
+                    c for c in page.overlay
+                    if not isinstance(c, FletAudio) and
+                       not isinstance(getattr(c, "content", None), FletAudio)
+                ]
+
+                wav_bytes = _gen_birthday_wav()
+                snd = FletAudio(src=wav_bytes, volume=1.0)
+
+                async def _on_loaded(e):
+                    try:
+                        await snd.play()
+                        if debug: _toast("OK — sonando!")
+                    except Exception as ex:
+                        if debug: _toast(f"[snd.play] {ex}")
+
+                snd.on_loaded = _on_loaded
+
+                # Registrar como servicio (correcto para ft.Service en Flet 0.85.1)
+                try:
+                    page._services.register_service(snd)
+                except Exception:
+                    # Fallback: 1px Container transparente mantiene el widget montado
+                    page.overlay.append(
+                        ft.Container(content=snd, width=1, height=1, bgcolor="transparent")
+                    )
+
                 page.update()
-                if debug: _toast("OK — sonando!")
             except Exception as ex:
                 if debug: _toast(f"[Audio] {ex}")
 

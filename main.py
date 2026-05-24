@@ -24,7 +24,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.4.6"
+APP_VERSION = "1.4.7"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -205,6 +205,8 @@ T = {
         "stats_milestones": "Cumpleaños especiales este año",
         "stats_no_milestones": "Sin cumpleaños redondos este año",
         "cal_multi_title":  "Cumpleaños del día",
+        "test_popup_btn":   "Probar popup de cumpleaños",
+        "test_popup_demo":  "Demo — Pedro (30 años)",
     },
     "en": {
         "app_sub":        "Birthday Reminder",
@@ -323,6 +325,8 @@ T = {
         "stats_milestones": "Milestone birthdays this year",
         "stats_no_milestones": "No milestone birthdays this year",
         "cal_multi_title":  "Birthdays on this day",
+        "test_popup_btn":   "Test birthday popup",
+        "test_popup_demo":  "Demo — Pedro (30 years)",
     },
 }
 
@@ -2337,6 +2341,21 @@ def main(page: ft.Page):
         except Exception as ex:
             _toast(f"Error: {ex}")
 
+    # ── Test-popup helper (called from Settings button) ───────────────────
+    def _do_test_popup():
+        """Dispara el popup de cumpleaños inmediatamente.
+        Usa contactos con cumpleaños HOY si existen; si no, usa un contacto
+        de demo para que el usuario pueda comprobar que el popup funciona.
+        """
+        tc = [c for c in db.all_contacts() if days_until(c[2], c[3]) == 0]
+        if not tc:
+            _today = date.today()
+            # Fila sintética: id=0, name, day, month, year, phone, email, notes,
+            # relation, photo, gift_note  (misma estructura que all_contacts())
+            tc = [(0, t("test_popup_demo"), _today.day, _today.month,
+                   _today.year - 30, "", "", "", "friend", "", "")]
+        _birthday_popup(tc)
+
     # SETTINGS
     # ─────────────────────────────────────────────────────────────────────
     def _show_settings():
@@ -2495,6 +2514,14 @@ def main(page: ft.Page):
                          db.get("sound_popup", "1") == "0",
                          lambda e: _toggle_setting("sound_popup")),
             ], spacing=10),
+
+            # ── Test popup ────────────────────────────────────────────────
+            _btn(
+                f"\U0001f514  {t('test_popup_btn')}",
+                C["pink"],
+                on_click=lambda e: _do_test_popup(),
+                expand=True,
+            ),
             # ── Backup ───────────────────────────────────────────────────
             _sec(t("set_backup")),
             ft.Row([

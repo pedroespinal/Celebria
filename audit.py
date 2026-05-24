@@ -379,9 +379,13 @@ if bd_match:
     if re.search(r'(?:ft\.)?AlertDialog\s*\(', bd_code_only):
         E("_show_birthday() contiene AlertDialog() — debería usar solo controles Flet")
 
-    # Verificar que el audio está presente — puede ser inline (FletAudio) o via _play_birthday_sound()
+    # Verificar que el audio está presente — puede ser inline (FletAudio),
+    # via _play_birthday_sound() DENTRO de _show_birthday(), O (patrón v1.4.17+)
+    # llamado en los callers ANTES de navigate("birthday") (pre-navigate pattern).
     if "_play_birthday_sound" not in bd_body and "FletAudio" not in bd_body:
-        W("_show_birthday() no tiene audio — ni _play_birthday_sound() ni FletAudio inline")
+        # Patrón v1.4.17+: audio en _do_test_popup / _fire_birthday_popup
+        if not ("_play_birthday_sound" in src and "_do_test_popup" in src):
+            W("_show_birthday() no tiene audio — ni _play_birthday_sound() ni FletAudio inline")
 
     # Verificar navigate("home") en _celebrate
     if 'navigate("home")' not in bd_body and "navigate('home')" not in bd_body:

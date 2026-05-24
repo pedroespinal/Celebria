@@ -24,7 +24,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.4.16"
+APP_VERSION = "1.4.17"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -1051,6 +1051,14 @@ def main(page: ft.Page):
             snd_holder[0] = wrapper
             page.overlay.append(wrapper)
             page.update()
+            # Comando explícito de reproducción — autoplay puede no disparar
+            # cuando el widget se agrega dinámicamente al overlay mientras
+            # Flutter está procesando una reconstrucción de página (navigate).
+            # Llamar snd.play() garantiza la reproducción en ambos casos.
+            try:
+                snd.play()
+            except Exception:
+                pass
 
             # Fallback: si on_state_change no dispara, limpiar a los 5 s
             _cleanup_timer = threading.Timer(5.0, _remove_snd)
@@ -2405,7 +2413,12 @@ def main(page: ft.Page):
                 tc = [(0, t("test_popup_demo"), _today.day, _today.month,
                        _today.year - 30, "", "", "", "friend", "", "")]
             state["_birthday_contacts"] = tc
-            state["_bd_sound_played"]   = False   # _show_birthday() lo reproduce
+            # Reproducir sonido ANTES de navegar — mientras Settings está
+            # estable, el widget Audio se monta limpiamente en overlay y
+            # autoplay/snd.play() disparan sin competir con la reconstrucción
+            # de página que ocurre dentro de navigate("birthday").
+            state["_bd_sound_played"]   = True
+            _play_birthday_sound(debug=True)
             navigate("birthday")
         except Exception as _ex:
             _toast(f"Error al probar popup: {_ex}")
@@ -2793,11 +2806,8 @@ def main(page: ft.Page):
             expand=True,
         ))
 
-        # Reproducir sonido una vez por sesión de pantalla birthday.
-        # debug=True → toast visible para diagnóstico ("OK" / error exacto)
-        if not state["_bd_sound_played"]:
-            state["_bd_sound_played"] = True
-            _play_birthday_sound(debug=True)
+        # Sonido reproducido ANTES de navegar (en _do_test_popup / _fire_birthday_popup)
+        # mientras la pantalla anterior estaba estable — no se llama aquí.
 
     # ─────────────────────────────────────────────────────────────────────
     # BIRTHDAY POPUP (AlertDialog — kept for reference, not used on Android)
@@ -2934,7 +2944,10 @@ def main(page: ft.Page):
             def _fire_birthday_popup(tc=today_contacts):
                 async def _show():
                     state["_birthday_contacts"] = tc
-                    state["_bd_sound_played"]   = False   # _show_birthday() lo reproduce
+                    # Reproducir sonido ANTES de navegar — mientras Home está
+                    # estable, el widget Audio se monta limpiamente en overlay.
+                    state["_bd_sound_played"]   = True
+                    _play_birthday_sound()
                     navigate("birthday")
                 page.run_task(_show)
             _bd_timer = _threading.Timer(3.5, _fire_birthday_popup)

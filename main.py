@@ -24,7 +24,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.4.12"
+APP_VERSION = "1.4.13"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -2727,6 +2727,73 @@ def main(page: ft.Page):
                 )
             )
 
+        # ── Audio: añadir al overlay ANTES de page.add() ────────────────────
+        # FIX v1.4.13: el audio debe montarse en el MISMO page.update() que
+        # el árbol de controles de la pantalla.  Si se añade después (incluso
+        # con timer), el primer page.update() ya envió un overlay vacío y
+        # Flutter puede no montar el widget de audio correctamente.
+        # Patrón equivalente a v1.4.8 donde _play_birthday_sound() añadía el
+        # wrapper al overlay y luego _open_dlg() lo actualizaba — ambas cosas
+        # llegaban a Flutter en sus propios page.update() consecutivos.
+        # Aquí hacemos algo aún más limpio: overlay ← audio_wrapper (sin
+        # page.update()), y luego page.add(column) dispara UN SOLO page.update()
+        # que lleva tanto los controles como el overlay en el mismo frame.
+        if not state["_bd_sound_played"] and _AUDIO_AVAILABLE and db.get("sound_popup", "1") == "1":
+            try:
+                if _WAV_CACHE[0] is None:
+                    _WAV_CACHE[0] = _gen_birthday_wav()
+                _bd_storage = os.environ.get("FLET_APP_STORAGE_DATA", "")
+                if _bd_storage:
+                    _bd_wav = os.path.join(_bd_storage, "celebria_chime.wav")
+                else:
+                    import tempfile
+                    _bd_wav = os.path.join(tempfile.gettempdir(), "celebria_chime.wav")
+                with open(_bd_wav, "wb") as _bdf:
+                    _bdf.write(_WAV_CACHE[0])
+
+                _bd_ref:  list = [None]
+                _bd_done: list = [False]
+                _bd_play: list = [False]
+
+                def _bd_remove():
+                    if _bd_done[0]: return
+                    _bd_done[0] = True
+                    try:
+                        if _bd_ref[0] in page.overlay:
+                            page.overlay.remove(_bd_ref[0])
+                            page.update()
+                    except Exception: pass
+
+                def _bd_state(e):
+                    try:
+                        st  = getattr(e, "state", None)
+                        pst = getattr(_AudioState, "PLAYING", None) if _AudioState else None
+                        if st == pst:
+                            _bd_play[0] = True
+                        elif _bd_play[0] and st != pst:
+                            _bd_remove()
+                    except Exception: pass
+
+                _bd_snd = FletAudio(
+                    src=f"file://{_bd_wav}",
+                    autoplay=True,
+                    volume=0.8,
+                    on_state_change=_bd_state,
+                )
+                _bd_aw = ft.Container(
+                    content=_bd_snd, width=1, height=1, bgcolor="transparent",
+                )
+                _bd_ref[0] = _bd_aw
+                page.overlay.append(_bd_aw)   # ← SIN page.update() — lo dispara page.add()
+                state["_bd_sound_played"] = True
+
+                import threading as _th_bd
+                _bd_cleanup = _th_bd.Timer(5.0, _bd_remove)
+                _bd_cleanup.daemon = True
+                _bd_cleanup.start()
+            except Exception as _bd_ex:
+                _toast(f"[Audio] {_bd_ex}")
+
         # Sin appbar ni navbar — pantalla de celebración inmersiva
         page.appbar         = None
         page.navigation_bar = None
@@ -2785,19 +2852,7 @@ def main(page: ft.Page):
             expand=True,
         ))
 
-        # Reproducir sonido con pequeño retardo para que Flutter haya
-        # procesado el page.add() anterior antes de montar el widget Audio.
-        # Patrón idéntico al del timer del popup de cumpleaños.
-        if not state["_bd_sound_played"]:
-            state["_bd_sound_played"] = True
-            import threading as _th_snd
-            def _do_sound():
-                async def _play():
-                    _play_birthday_sound()
-                page.run_task(_play)
-            _snd_timer = _th_snd.Timer(0.6, _do_sound)
-            _snd_timer.daemon = True
-            _snd_timer.start()
+        # Audio ya montado en overlay antes de page.add() — ver bloque superior.
 
     # ─────────────────────────────────────────────────────────────────────
     # BIRTHDAY POPUP (AlertDialog — kept for reference, not used on Android)

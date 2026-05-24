@@ -24,7 +24,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.4.9"
+APP_VERSION = "1.4.10"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -2768,22 +2768,18 @@ def main(page: ft.Page):
                     padding=ft.Padding(left=20, top=36, right=20, bottom=20),
                     expand=True,
                 ),
+                # FIX: usa _btn() — ft.ElevatedButton con text_style= no existe
+                # en Flet 0.85.1 y crashea la pantalla (mismo bug que _field)
                 ft.Container(
-                    content=ft.ElevatedButton(
+                    content=_btn(
                         f"\U0001f389  {t('popup_close')}",
+                        C["pink"],
                         on_click=_celebrate,
-                        bgcolor=C["pink"],
-                        color=C["bg"],
-                        width=280,
-                        height=52,
-                        style=ft.ButtonStyle(
-                            text_style=ft.TextStyle(
-                                size=18, weight=ft.FontWeight.BOLD,
-                            ),
-                        ),
+                        expand=False,
                     ),
                     alignment=ft.alignment.center,
-                    padding=ft.Padding(left=20, top=0, right=20, bottom=32),
+                    padding=ft.Padding(left=32, top=0, right=32, bottom=32),
+                    width=320,
                 ),
             ],
             expand=True,

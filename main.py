@@ -24,7 +24,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.4.14"
+APP_VERSION = "1.4.15"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -2397,10 +2397,7 @@ def main(page: ft.Page):
                 tc = [(0, t("test_popup_demo"), _today.day, _today.month,
                        _today.year - 30, "", "", "", "friend", "", "")]
             state["_birthday_contacts"] = tc
-            # Reproducir sonido AQUÍ, mientras settings está estable —
-            # el overlay persiste durante navigate("birthday").
-            state["_bd_sound_played"] = True
-            _play_birthday_sound()
+            state["_bd_sound_played"]   = False   # _show_birthday() lo reproduce
             navigate("birthday")
         except Exception as _ex:
             _toast(f"Error al probar popup: {_ex}")
@@ -2730,15 +2727,43 @@ def main(page: ft.Page):
                 )
             )
 
+        # ── Audio inline: widget FletAudio dentro del Column de la pantalla ──
+        # Se monta en el MISMO page.add() que el árbol visual — sin overlay,
+        # sin threading.Timer extra, sin page.update() adicional.
+        # Se desmonta automáticamente al navegar fuera (page.controls.clear()).
+        _audio_ctl = ft.Container(width=0, height=0)   # placeholder (sin audio)
+        if (not state["_bd_sound_played"] and _AUDIO_AVAILABLE
+                and db.get("sound_popup", "1") == "1"):
+            try:
+                if _WAV_CACHE[0] is None:
+                    _WAV_CACHE[0] = _gen_birthday_wav()
+                _bd_stor = os.environ.get("FLET_APP_STORAGE_DATA", "")
+                if _bd_stor:
+                    _bd_wav = os.path.join(_bd_stor, "celebria_chime.wav")
+                else:
+                    import tempfile as _tmpmod
+                    _bd_wav = os.path.join(_tmpmod.gettempdir(), "celebria_chime.wav")
+                with open(_bd_wav, "wb") as _ff:
+                    _ff.write(_WAV_CACHE[0])
+                _audio_ctl = ft.Container(
+                    content=FletAudio(
+                        src=f"file://{_bd_wav}",
+                        autoplay=True,
+                        volume=0.8,
+                    ),
+                    width=1, height=1, bgcolor="transparent",
+                )
+                state["_bd_sound_played"] = True
+            except Exception as _ex:
+                _toast(f"[Audio] {_ex}")
+
         # Sin appbar ni navbar — pantalla de celebración inmersiva
-        # Nota: el sonido se inicia ANTES de navigate("birthday"), mientras la
-        # pantalla anterior está estable, para que el overlay de audio ya esté
-        # montado en Flutter cuando llegue esta pantalla. Ver timer/_do_test_popup.
         page.appbar         = None
         page.navigation_bar = None
 
         page.add(ft.Column(
             controls=[
+                _audio_ctl,   # ← FletAudio invisible, primer hijo del Column
                 ft.Container(
                     content=ft.Column(
                         controls=[
@@ -2926,11 +2951,7 @@ def main(page: ft.Page):
             def _fire_birthday_popup(tc=today_contacts):
                 async def _show():
                     state["_birthday_contacts"] = tc
-                    # Reproducir sonido ANTES de navegar, mientras home
-                    # está estable — patrón idéntico a v1.4.8.
-                    # El overlay persiste durante navigate("birthday").
-                    state["_bd_sound_played"] = True
-                    _play_birthday_sound()
+                    state["_bd_sound_played"]   = False   # _show_birthday() lo reproduce
                     navigate("birthday")
                 page.run_task(_show)
             _bd_timer = _threading.Timer(3.5, _fire_birthday_popup)

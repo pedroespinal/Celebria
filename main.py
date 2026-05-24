@@ -24,7 +24,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.4.11"
+APP_VERSION = "1.4.12"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -1051,7 +1051,7 @@ def main(page: ft.Page):
 
             if debug: _toast("OK — playing!")
         except Exception as ex:
-            if debug: _toast(f"ERROR: {ex}")
+            _toast(f"[Audio] {ex}")   # siempre visible — facilita diagnóstico
 
     # ── Avatar helper ─────────────────────────────────────────────────────
     def _avatar(photo, name, relation, size=44):
@@ -2785,10 +2785,19 @@ def main(page: ft.Page):
             expand=True,
         ))
 
-        # Reproducir sonido solo una vez por sesión de pantalla birthday
+        # Reproducir sonido con pequeño retardo para que Flutter haya
+        # procesado el page.add() anterior antes de montar el widget Audio.
+        # Patrón idéntico al del timer del popup de cumpleaños.
         if not state["_bd_sound_played"]:
             state["_bd_sound_played"] = True
-            _play_birthday_sound()
+            import threading as _th_snd
+            def _do_sound():
+                async def _play():
+                    _play_birthday_sound()
+                page.run_task(_play)
+            _snd_timer = _th_snd.Timer(0.6, _do_sound)
+            _snd_timer.daemon = True
+            _snd_timer.start()
 
     # ─────────────────────────────────────────────────────────────────────
     # BIRTHDAY POPUP (AlertDialog — kept for reference, not used on Android)

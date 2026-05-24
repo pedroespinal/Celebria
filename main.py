@@ -24,7 +24,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.4.7"
+APP_VERSION = "1.4.8"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -1025,9 +1025,11 @@ def main(page: ft.Page):
                 volume=0.8,
                 on_state_change=_on_state_change,
             )
-            # visible=False → Flutter usa Offstage: el control existe en el
-            # árbol (audio funciona) pero nunca se pinta → sin barra roja.
-            wrapper = ft.Container(content=snd, visible=False)
+            # width=1/height=1 transparent → widget vivo en árbol Flutter (audio
+            # funciona) sin nada visible. NUNCA usar visible=False: Flutter usa
+            # Visibility(maintainState:false) que desmonta el hijo → audio muere.
+            wrapper = ft.Container(content=snd, width=1, height=1,
+                                   bgcolor="transparent")
             snd_holder[0] = wrapper
             page.overlay.append(wrapper)
             page.update()
@@ -1061,6 +1063,34 @@ def main(page: ft.Page):
             ),
             alignment=ft.Alignment.CENTER,
         )
+
+    # ── Dialog helpers ────────────────────────────────────────────────────
+    # page.show_dialog(AlertDialog) falla silenciosamente en Flet 0.85.1
+    # Android. La única forma confiable es overlay directo + dlg.open = True.
+    # NUNCA usar page.show_dialog() para AlertDialog — solo funciona para SnackBar.
+    _dlg_stack: list = []
+
+    def _open_dlg(dlg):
+        """Muestra un AlertDialog modal via overlay — confiable en Flet 0.85.1."""
+        try:
+            page.overlay.append(dlg)
+            dlg.open = True
+            _dlg_stack.append(dlg)
+            page.update()
+        except Exception as _e:
+            _toast(f"dlg open error: {_e}")
+
+    def _close_dlg():
+        """Cierra el último AlertDialog abierto con _open_dlg."""
+        if _dlg_stack:
+            d = _dlg_stack.pop()
+            try:
+                d.open = False
+                if d in page.overlay:
+                    page.overlay.remove(d)
+                page.update()
+            except Exception:
+                pass
 
     # ── Border helper (same pattern as ElBartenderMovil) ─────────────────
     def _bdr(width, color):
@@ -1675,7 +1705,7 @@ def main(page: ft.Page):
 
         def on_delete(e):
             def do_del(e2):
-                page.pop_dialog()
+                _close_dlg()
                 db.delete(state["edit_id"])
                 state["edit_id"]  = None
                 state["rel"]      = "friend"
@@ -1687,13 +1717,13 @@ def main(page: ft.Page):
                 bgcolor=C["bg2"],
                 title=ft.Text(t("confirm_delete"), color=C["yellow"]),
                 actions=[
-                    ft.TextButton(t("confirm_no"),  on_click=lambda e: page.pop_dialog(),
+                    ft.TextButton(t("confirm_no"),  on_click=lambda e: _close_dlg(),
                                   style=ft.ButtonStyle(color=C["t3"])),
                     ft.TextButton(t("confirm_yes"), on_click=do_del,
                                   style=ft.ButtonStyle(color=C["red"])),
                 ],
             )
-            page.show_dialog(dlg)
+            _open_dlg(dlg)
 
         def _set_rel(rv):
             state["rel"] = rv
@@ -1932,7 +1962,7 @@ def main(page: ft.Page):
                 navigate("detail")
             else:
                 def _pick(cid):
-                    page.pop_dialog()
+                    _close_dlg()
                     state["detail_id"] = cid
                     navigate("detail")
                 items = [
@@ -1960,12 +1990,12 @@ def main(page: ft.Page):
                     actions=[
                         ft.TextButton(
                             t("btn_cancel"),
-                            on_click=lambda e: page.pop_dialog(),
+                            on_click=lambda e: _close_dlg(),
                             style=ft.ButtonStyle(color=C["t3"]),
                         ),
                     ],
                 )
-                page.show_dialog(dlg)
+                _open_dlg(dlg)
 
         abbrs = T[LANG[0]]["days_abbr"]
         day_hdrs = ft.Row([
@@ -2268,7 +2298,7 @@ def main(page: ft.Page):
                     c["name"], c["day"], c["month"], c.get("year"),
                     c.get("phone", ""), "", "", "friend",
                 )
-            page.pop_dialog()
+            _close_dlg()
             _toast(f"✓  {len(selected)} {t('import_vcf_ok')}")
             render()
 
@@ -2309,7 +2339,7 @@ def main(page: ft.Page):
             ],
             actions_alignment=ft.MainAxisAlignment.END,
         )
-        page.show_dialog(dlg)
+        _open_dlg(dlg)
 
     async def _do_vcf_import(e):
         """Abre el selector de archivos .vcf y procesa el resultado."""
@@ -2347,14 +2377,17 @@ def main(page: ft.Page):
         Usa contactos con cumpleaños HOY si existen; si no, usa un contacto
         de demo para que el usuario pueda comprobar que el popup funciona.
         """
-        tc = [c for c in db.all_contacts() if days_until(c[2], c[3]) == 0]
-        if not tc:
-            _today = date.today()
-            # Fila sintética: id=0, name, day, month, year, phone, email, notes,
-            # relation, photo, gift_note  (misma estructura que all_contacts())
-            tc = [(0, t("test_popup_demo"), _today.day, _today.month,
-                   _today.year - 30, "", "", "", "friend", "", "")]
-        _birthday_popup(tc)
+        try:
+            tc = [c for c in db.all_contacts() if days_until(c[2], c[3]) == 0]
+            if not tc:
+                _today = date.today()
+                # Fila sintética: id=0, name, day, month, year, phone, email,
+                # notes, relation, photo, gift_note (misma estructura all_contacts)
+                tc = [(0, t("test_popup_demo"), _today.day, _today.month,
+                       _today.year - 30, "", "", "", "friend", "", "")]
+            _birthday_popup(tc)
+        except Exception as _ex:
+            _toast(f"Error al probar popup: {_ex}")
 
     # SETTINGS
     # ─────────────────────────────────────────────────────────────────────
@@ -2615,89 +2648,81 @@ def main(page: ft.Page):
     # FIX: removed tight=True from Columns inside AlertDialog
     # ─────────────────────────────────────────────────────────────────────
     def _birthday_popup(today_contacts):
-        # Build one card per birthday contact
-        contact_cards = []
-        for row in today_contacts:
-            _, name, day, month, year, *_ = row
-            age = calc_age(day, month, year)
-            _age_this_year = (date.today().year - year) if year else None
-            _milestone = (_age_this_year in MILESTONE_AGES) if _age_this_year is not None else False
-            if age is not None:
-                line = f"{name}\n{t('popup_turns')} {age} {t('popup_years')} \U0001f382"
-            else:
-                line = f"{name}  \U0001f382"
-            if _milestone:
-                line += f"\n✨ {t('milestone_popup')}"
-            contact_cards.append(
-                ft.Container(
-                    content=ft.Text(
-                        line, size=14,
-                        color=C["yellow"] if _milestone else C["cyan"],
-                        weight=ft.FontWeight.W_600,
-                        text_align=ft.TextAlign.CENTER,
-                    ),
-                    bgcolor=C["purpledim"] if _milestone else C["cyandim"],
-                    border_radius=12,
-                    border=_bdr(1, C["yellow"]) if _milestone else None,
-                    padding=ft.Padding(left=16, top=10, right=16, bottom=10),
+        try:
+            # Build one card per birthday contact
+            contact_cards = []
+            for row in today_contacts:
+                _, name, day, month, year, *_ = row
+                age = calc_age(day, month, year)
+                _age_this_year = (date.today().year - year) if year else None
+                _milestone = (_age_this_year in MILESTONE_AGES) if _age_this_year is not None else False
+                if age is not None:
+                    line = f"{name}\n{t('popup_turns')} {age} {t('popup_years')} \U0001f382"
+                else:
+                    line = f"{name}  \U0001f382"
+                if _milestone:
+                    line += f"\n✨ {t('milestone_popup')}"
+                contact_cards.append(
+                    ft.Container(
+                        content=ft.Text(
+                            line, size=14,
+                            color=C["yellow"] if _milestone else C["cyan"],
+                            weight=ft.FontWeight.W_600,
+                            text_align=ft.TextAlign.CENTER,
+                        ),
+                        bgcolor=C["purpledim"] if _milestone else C["cyandim"],
+                        border_radius=12,
+                        border=_bdr(1, C["yellow"]) if _milestone else None,
+                        padding=ft.Padding(left=16, top=10, right=16, bottom=10),
+                    )
                 )
-            )
 
-        def _close_popup(e):
-            page.pop_dialog()
+            def _close_popup(e):
+                _close_dlg()
 
-        dlg = ft.AlertDialog(
-            modal=True,
-            bgcolor=C["bg2"],
-            # ── Header row: title + X button always visible ────────────
-            title=ft.Row([
-                ft.Text(
+            dlg = ft.AlertDialog(
+                modal=True,
+                bgcolor=C["bg2"],
+                # ── Title row: centered title (no X button — use the ¡Celebrar! button)
+                title=ft.Text(
                     t("popup_title"), size=18, color=C["pink"],
-                    weight=ft.FontWeight.BOLD, expand=True,
+                    weight=ft.FontWeight.BOLD,
                     text_align=ft.TextAlign.CENTER,
                 ),
-                ft.IconButton(
-                    icon=ft.Icons.CLOSE,
-                    icon_color=C["t3"],
-                    icon_size=20,
-                    on_click=_close_popup,
-                    tooltip="Cerrar / Close",
-                    padding=ft.Padding(left=0, top=0, right=0, bottom=0),
+                # ── Scrollable content with fixed max height ───────────────
+                content=ft.Container(
+                    content=ft.Column([
+                        ft.Text(
+                            "\U0001f388 \U0001f38a \U0001f389 \U0001f381 \U0001f389 \U0001f38a \U0001f388",
+                            size=20, text_align=ft.TextAlign.CENTER,
+                        ),
+                        ft.Text("\U0001f382", size=68, text_align=ft.TextAlign.CENTER),
+                        ft.Container(
+                            height=2, bgcolor=C["pink"], border_radius=1,
+                        ),
+                        *contact_cards,
+                        ft.Text(
+                            "✨ \U0001f38a \U0001f389 \U0001f38a ✨",
+                            size=16, text_align=ft.TextAlign.CENTER,
+                        ),
+                    ], horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                       spacing=8, scroll=ft.ScrollMode.AUTO),
+                    height=320,
+                    width=280,
                 ),
-            ], spacing=0),
-            # ── Scrollable content with fixed max height ───────────────
-            content=ft.Container(
-                content=ft.Column([
-                    ft.Text(
-                        "\U0001f388 \U0001f38a \U0001f389 \U0001f381 \U0001f389 \U0001f38a \U0001f388",
-                        size=20, text_align=ft.TextAlign.CENTER,
+                actions=[
+                    ft.TextButton(
+                        f"\U0001f389  {t('popup_close')}",
+                        on_click=_close_popup,
+                        style=ft.ButtonStyle(color=C["pink"]),
                     ),
-                    ft.Text("\U0001f382", size=68, text_align=ft.TextAlign.CENTER),
-                    ft.Container(
-                        height=2, bgcolor=C["pink"], border_radius=1,
-                        margin=ft.Margin(left=10, right=10, top=0, bottom=4),
-                    ),
-                    *contact_cards,
-                    ft.Text(
-                        "✨ \U0001f38a \U0001f389 \U0001f38a ✨",
-                        size=16, text_align=ft.TextAlign.CENTER,
-                    ),
-                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                   spacing=8, scroll=ft.ScrollMode.AUTO),
-                height=320,
-                width=280,
-            ),
-            actions=[
-                ft.TextButton(
-                    f"\U0001f389  {t('popup_close')}",
-                    on_click=_close_popup,
-                    style=ft.ButtonStyle(color=C["pink"]),
-                ),
-            ],
-            actions_alignment=ft.MainAxisAlignment.CENTER,
-        )
-        _play_birthday_sound()
-        page.show_dialog(dlg)
+                ],
+                actions_alignment=ft.MainAxisAlignment.CENTER,
+            )
+            _play_birthday_sound()
+            _open_dlg(dlg)
+        except Exception as _ex:
+            _toast(f"Popup error: {_ex}")
 
     # ── Platform detection + File pickers ────────────────────────────────
     # Los pickers se declaran ANTES de render() para que los closures los
@@ -2798,7 +2823,7 @@ def main(page: ft.Page):
             if not forced:
                 actions.append(ft.TextButton(
                     btn_later,
-                    on_click=lambda e: page.pop_dialog(),
+                    on_click=lambda e: _close_dlg(),
                     style=ft.ButtonStyle(color=C["t3"]),
                 ))
             # Abre la página de releases (no la URL directa del APK).
@@ -2810,7 +2835,7 @@ def main(page: ft.Page):
             actions.append(ft.TextButton(
                 btn_dl,
                 url=releases_page,
-                on_click=lambda e: page.pop_dialog(),
+                on_click=lambda e: _close_dlg(),
                 style=ft.ButtonStyle(color=dl_color),
             ))
 
@@ -2826,7 +2851,7 @@ def main(page: ft.Page):
                 actions=actions,
                 actions_alignment=ft.MainAxisAlignment.END,
             )
-            page.show_dialog(dlg)
+            _open_dlg(dlg)
 
         def _run():
             try:

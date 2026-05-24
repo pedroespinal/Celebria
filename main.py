@@ -24,7 +24,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.4.19"
+APP_VERSION = "1.4.20"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -590,7 +590,10 @@ def _parse_vcf(content: str) -> list:
     return result
 
 
-# ── Birthday chime — generated in memory, no asset path needed ───────────────
+# ── Birthday chime — bundled as assets/chime.wav ─────────────────────────────
+# El archivo se genera offline y se incluye en el APK como asset de Flet.
+# Flet lo sirve via HTTP server interno: src="/chime.wav" → Flutter lo carga
+# sin problemas de file:// ni permisos de almacenamiento en Android.
 def _gen_birthday_wav() -> bytes:
     """Return WAV bytes for the Happy Birthday chime (first phrase)."""
     import wave, struct, math, io
@@ -629,8 +632,7 @@ def _gen_birthday_wav() -> bytes:
     return buf.getvalue()
 
 
-_WAV_CACHE: list        = [None]   # lazy singleton — computed on first play
-_PERSISTENT_AUDIO: list = [None]   # FletAudio widget montado al inicio, vive en page.overlay toda la sesión
+# (no module-level audio state needed — widget se crea fresco en cada play)
 
 
 # ── Help content (bilingual) ──────────────────────────────────────────────────
@@ -982,16 +984,18 @@ def main(page: ft.Page):
     }
 
     def _play_birthday_sound(debug=False):
-        """Reproduce el chime de cumpleaños usando el widget pre-montado en overlay.
+        """Reproduce el chime de cumpleaños usando el asset bundleado /chime.wav.
 
-        El widget FletAudio se monta UNA VEZ al inicio de la app (ver más abajo,
-        sección '── Pre-montar audio widget') y permanece en page.overlay toda
-        la sesión. Así snd.play() siempre tiene el control disponible — sin timing
-        issues de mounting/unmounting ni conflictos con rebuild de página.
-
-        snd.play() es ASYNC en flet_audio 0.85.1 — se llama vía
-        page.run_task(_PERSISTENT_AUDIO[0].play) para ejecutarlo en el event
-        loop de Flet. Llamarlo sin await crearía una coroutine nunca ejecutada.
+        Estrategia v1.4.20:
+        - src="/chime.wav"  → Flet HTTP server interno sirve el asset a Flutter.
+          Sin file:// ni permisos de almacenamiento — funciona en Android 11+.
+        - FletAudio se agrega DIRECTAMENTE a page.overlay (sin Container wrapper).
+          Así Flet asigna .page correctamente al control y el widget queda montado.
+        - autoplay=True  → Flutter dispara el audio al montar el widget.
+          No se llama snd.play() desde Python (evita el problema async sin await).
+        - page.run_task(_do_play) schedula la coroutine DESPUÉS de que el handler
+          UI actual retorna — la pantalla birthday ya está estable cuando se agrega
+          el widget al overlay, sin conflicto con el rebuild de page.controls.
         """
         if not _AUDIO_AVAILABLE:
             if debug: _toast("flet_audio no disponible / not available")
@@ -999,18 +1003,21 @@ def main(page: ft.Page):
         if db.get("sound_popup", "1") != "1":
             if debug: _toast("Sonido OFF en ajustes / Sound OFF in settings")
             return
-        snd = _PERSISTENT_AUDIO[0]
-        if snd is None:
-            if debug: _toast("[Audio] widget no inicializado — flet_audio no disponible?")
-            return
-        try:
-            # snd.play es un bound method async — page.run_task lo llama y
-            # schedula la coroutine en el event loop de Flet correctamente.
-            # Funciona tanto desde event handlers UI como desde background threads.
-            page.run_task(snd.play)
-            if debug: _toast("OK — sonando!")
-        except Exception as ex:
-            _toast(f"[Audio] {ex}")
+
+        async def _do_play():
+            try:
+                # Limpiar widgets FletAudio anteriores del overlay (evita acumulación)
+                page.overlay[:] = [c for c in page.overlay
+                                   if not isinstance(c, FletAudio)]
+                # Crear widget fresco con asset path — Flet HTTP server lo sirve
+                snd = FletAudio(src="/chime.wav", autoplay=True, volume=1.0)
+                page.overlay.append(snd)   # directamente, sin Container wrapper
+                page.update()
+                if debug: _toast("OK — sonando!")
+            except Exception as ex:
+                if debug: _toast(f"[Audio] {ex}")
+
+        page.run_task(_do_play)
 
     # ── Avatar helper ─────────────────────────────────────────────────────
     def _avatar(photo, name, relation, size=44):
@@ -2744,11 +2751,10 @@ def main(page: ft.Page):
             expand=True,
         ))
 
-        # Reproducir sonido: el widget FletAudio está pre-montado en overlay
-        # desde el inicio de la app. page.run_task(snd.play) dentro de
-        # _play_birthday_sound() schedula la coroutine en el event loop — se
-        # ejecuta DESPUÉS de que este handler retorna, cuando el event loop
-        # está libre. No hay conflicto con page.add() ni con navigate().
+        # Reproducir sonido: _play_birthday_sound() crea un FletAudio fresco con
+        # src="/chime.wav" (asset bundleado) y autoplay=True, lo agrega directo
+        # a page.overlay via page.run_task() — se ejecuta DESPUÉS de que este
+        # handler retorna, cuando la pantalla birthday ya está estable.
         if not state["_bd_sound_played"]:
             state["_bd_sound_played"] = True
             _play_birthday_sound(debug=True)
@@ -2866,40 +2872,6 @@ def main(page: ft.Page):
             page.update()
         except Exception:
             pass
-
-    # ── Pre-montar audio widget en overlay ───────────────────────────────────
-    # Motivo: si el widget se agrega en el momento de reproducir (durante o
-    # después de navigate()), hay timing issues — autoplay puede no disparar
-    # porque Flutter está procesando el rebuild de la página simultáneamente.
-    # Solución: montar UNA VEZ aquí, inmediatamente después de render(), y
-    # dejarlo en el overlay el resto de la sesión. _play_birthday_sound() llama
-    # page.run_task(snd.play) — coroutine async ejecutada en el event loop.
-    # El archivo WAV se genera en memoria y se guarda en FLET_APP_STORAGE_DATA
-    # (accesible por Flutter audio player en Android).
-    if _AUDIO_AVAILABLE:
-        try:
-            if _WAV_CACHE[0] is None:
-                _WAV_CACHE[0] = _gen_birthday_wav()
-            _audio_storage = os.environ.get("FLET_APP_STORAGE_DATA", "")
-            if _audio_storage:
-                _wav_path = os.path.join(_audio_storage, "celebria_chime.wav")
-            else:
-                import tempfile as _tmpmod
-                _wav_path = os.path.join(_tmpmod.gettempdir(), "celebria_chime.wav")
-            with open(_wav_path, "wb") as _wf:
-                _wf.write(_WAV_CACHE[0])
-            _snd_widget = FletAudio(
-                src=f"file://{_wav_path}",
-                autoplay=False,   # No autoplay — reproducimos con snd.play() explícito
-                volume=0.8,
-            )
-            page.overlay.append(
-                ft.Container(content=_snd_widget, width=1, height=1, bgcolor="transparent")
-            )
-            page.update()
-            _PERSISTENT_AUDIO[0] = _snd_widget   # guardamos referencia para _play_birthday_sound()
-        except Exception:
-            pass   # Si falla, _PERSISTENT_AUDIO[0] queda None → _play_birthday_sound retorna early
 
     # Birthday popup — delay via threading.Timer (same pattern as update dialog).
     # page.show_dialog() fails silently on Android if called immediately after

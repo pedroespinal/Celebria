@@ -4,8 +4,12 @@ Detecta bugs, anti-patrones Flet 0.85.1, problemas async/await,
 thread safety, overlay management, y más.
 Uso: python deep_audit.py
 """
-import ast, re, sys
+import ast, re, sys, io
 from pathlib import Path
+
+# Forzar UTF-8 para que los emojis no rompan en consolas cp1252
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
 SRC_FILE = Path(__file__).parent / "main.py"
 src = SRC_FILE.read_text(encoding="utf-8-sig")   # utf-8-sig strips BOM

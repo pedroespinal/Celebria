@@ -24,7 +24,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.4.8"
+APP_VERSION = "1.4.9"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -205,8 +205,12 @@ T = {
         "stats_milestones": "Cumpleaños especiales este año",
         "stats_no_milestones": "Sin cumpleaños redondos este año",
         "cal_multi_title":  "Cumpleaños del día",
-        "test_popup_btn":   "Probar popup de cumpleaños",
-        "test_popup_demo":  "Demo — Pedro (30 años)",
+        "test_popup_btn":      "Probar popup de cumpleaños",
+        "test_popup_demo":     "Demo — Pedro (30 años)",
+        "set_remind_all_day":  "Recordar todo el día",
+        "remind_all_day_on":   "Sí, todo el día",
+        "remind_all_day_off":  "Solo una vez por día",
+        "birthday_screen_sub": "Hoy es un día especial",
     },
     "en": {
         "app_sub":        "Birthday Reminder",
@@ -325,8 +329,12 @@ T = {
         "stats_milestones": "Milestone birthdays this year",
         "stats_no_milestones": "No milestone birthdays this year",
         "cal_multi_title":  "Birthdays on this day",
-        "test_popup_btn":   "Test birthday popup",
-        "test_popup_demo":  "Demo — Pedro (30 years)",
+        "test_popup_btn":      "Test birthday popup",
+        "test_popup_demo":     "Demo — Pedro (30 years)",
+        "set_remind_all_day":  "Remind all day",
+        "remind_all_day_on":   "Yes, all day",
+        "remind_all_day_off":  "Only once a day",
+        "birthday_screen_sub": "Today is a special day",
     },
 }
 
@@ -958,16 +966,18 @@ def main(page: ft.Page):
 
     # ── Mutable state ─────────────────────────────────────────────────────
     state = {
-        "screen":    "home",
-        "edit_id":   None,
-        "detail_id": None,
-        "cal_year":  date.today().year,
-        "cal_month": date.today().month,
-        "search":    "",
-        "filter":    "all",
-        "rel":       "friend",
-        "_rel_for":  None,   # tracks which edit_id loaded rel from DB
-        "photo":     "",     # foto temporal durante add/edit
+        "screen":             "home",
+        "edit_id":            None,
+        "detail_id":          None,
+        "cal_year":           date.today().year,
+        "cal_month":          date.today().month,
+        "search":             "",
+        "filter":             "all",
+        "rel":                "friend",
+        "_rel_for":           None,   # tracks which edit_id loaded rel from DB
+        "photo":              "",     # foto temporal durante add/edit
+        "_birthday_contacts": [],     # contactos que cumplen hoy (para pantalla)
+        "_bd_sound_played":   False,  # evita reproducir el sonido dos veces
     }
 
     def _play_birthday_sound(debug=False):
@@ -1366,6 +1376,7 @@ def main(page: ft.Page):
             elif scr == "settings": _show_settings()
             elif scr == "help":     _show_help()
             elif scr == "stats":    _show_stats()
+            elif scr == "birthday": _show_birthday()
         except Exception:
             import traceback
             err = traceback.format_exc()
@@ -2373,9 +2384,9 @@ def main(page: ft.Page):
 
     # ── Test-popup helper (called from Settings button) ───────────────────
     def _do_test_popup():
-        """Dispara el popup de cumpleaños inmediatamente.
+        """Navega a la pantalla de cumpleaños inmediatamente (botón de prueba).
         Usa contactos con cumpleaños HOY si existen; si no, usa un contacto
-        de demo para que el usuario pueda comprobar que el popup funciona.
+        de demo para verificar que la pantalla y el sonido funcionan.
         """
         try:
             tc = [c for c in db.all_contacts() if days_until(c[2], c[3]) == 0]
@@ -2385,7 +2396,9 @@ def main(page: ft.Page):
                 # notes, relation, photo, gift_note (misma estructura all_contacts)
                 tc = [(0, t("test_popup_demo"), _today.day, _today.month,
                        _today.year - 30, "", "", "", "friend", "", "")]
-            _birthday_popup(tc)
+            state["_birthday_contacts"] = tc
+            state["_bd_sound_played"]   = False
+            navigate("birthday")
         except Exception as _ex:
             _toast(f"Error al probar popup: {_ex}")
 
@@ -2422,6 +2435,12 @@ def main(page: ft.Page):
         def _toggle_setting(key):
             new_val = "0" if db.get(key, "1") == "1" else "1"
             db.set(key, new_val)
+            render()
+
+        def _toggle_remind_all(e):
+            """Toggle remind_all_day — default OFF ("0"), so invert correctly."""
+            new_val = "1" if db.get("remind_all_day", "0") == "0" else "0"
+            db.set("remind_all_day", new_val)
             render()
 
         async def do_export(e):
@@ -2548,9 +2567,24 @@ def main(page: ft.Page):
                          lambda e: _toggle_setting("sound_popup")),
             ], spacing=10),
 
+            # ── Remind all day ────────────────────────────────────────────
+            _sec(t("set_remind_all_day")),
+            ft.Row([
+                _opt_btn(
+                    f"\U0001f514  {t('remind_all_day_on')}",
+                    db.get("remind_all_day", "0") == "1",
+                    _toggle_remind_all,
+                ),
+                _opt_btn(
+                    f"\U0001f515  {t('remind_all_day_off')}",
+                    db.get("remind_all_day", "0") == "0",
+                    _toggle_remind_all,
+                ),
+            ], spacing=10),
+
             # ── Test popup ────────────────────────────────────────────────
             _btn(
-                f"\U0001f514  {t('test_popup_btn')}",
+                f"\U0001f388  {t('test_popup_btn')}",
                 C["pink"],
                 on_click=lambda e: _do_test_popup(),
                 expand=True,
@@ -2644,7 +2678,124 @@ def main(page: ft.Page):
         ))
 
     # ─────────────────────────────────────────────────────────────────────
-    # BIRTHDAY POPUP
+    # BIRTHDAY SCREEN (reemplaza el AlertDialog que fallaba en Android)
+    # Navegamos a esta pantalla en vez de mostrar un dialog.
+    # Funciona 100 % en Android porque usa controles Flet normales.
+    # ─────────────────────────────────────────────────────────────────────
+    def _show_birthday():
+        """Pantalla completa de cumpleaños — sin dialogs, sin AlertDialog."""
+        today_contacts = state["_birthday_contacts"]
+        if not today_contacts:
+            navigate("home")
+            return
+
+        def _celebrate(e):
+            # Si remind_all_day está OFF → guardar fecha de hoy para no
+            # mostrar la pantalla de nuevo al reabrir la app hoy.
+            if db.get("remind_all_day", "0") == "0":
+                db.set("birthday_dismissed_date", str(date.today()))
+            navigate("home")
+
+        # Construir tarjeta por cada cumpleañero
+        contact_cards = []
+        for row in today_contacts:
+            _, name, day, month, year, *_ = row
+            age = calc_age(day, month, year)
+            _age_this_year = (date.today().year - year) if year else None
+            _milestone = (
+                (_age_this_year in MILESTONE_AGES)
+                if _age_this_year is not None else False
+            )
+            if age is not None:
+                line = f"{name}\n{t('popup_turns')} {age} {t('popup_years')} \U0001f382"
+            else:
+                line = f"{name}  \U0001f382"
+            if _milestone:
+                line += f"\n✨ {t('milestone_popup')}"
+            contact_cards.append(
+                ft.Container(
+                    content=ft.Text(
+                        line, size=16,
+                        color=C["yellow"] if _milestone else C["cyan"],
+                        weight=ft.FontWeight.W_600,
+                        text_align=ft.TextAlign.CENTER,
+                    ),
+                    bgcolor=C["purpledim"] if _milestone else C["cyandim"],
+                    border_radius=12,
+                    border=_bdr(1, C["yellow"]) if _milestone else None,
+                    padding=ft.Padding(left=16, top=12, right=16, bottom=12),
+                )
+            )
+
+        # Sin appbar ni navbar — pantalla de celebración inmersiva
+        page.appbar         = None
+        page.navigation_bar = None
+
+        page.add(ft.Column(
+            controls=[
+                ft.Container(
+                    content=ft.Column(
+                        controls=[
+                            ft.Text(
+                                "\U0001f388 \U0001f38a \U0001f389 \U0001f381 \U0001f389 \U0001f38a \U0001f388",
+                                size=22, text_align=ft.TextAlign.CENTER,
+                            ),
+                            ft.Text("\U0001f382", size=88,
+                                    text_align=ft.TextAlign.CENTER),
+                            ft.Text(
+                                t("popup_title"),
+                                size=26, color=C["pink"],
+                                weight=ft.FontWeight.BOLD,
+                                text_align=ft.TextAlign.CENTER,
+                            ),
+                            ft.Text(
+                                t("birthday_screen_sub"),
+                                size=13, color=C["t2"],
+                                text_align=ft.TextAlign.CENTER,
+                            ),
+                            ft.Container(height=2, bgcolor=C["pink"],
+                                         border_radius=1),
+                            *contact_cards,
+                            ft.Text(
+                                "✨ \U0001f38a \U0001f389 \U0001f38a ✨",
+                                size=18, text_align=ft.TextAlign.CENTER,
+                            ),
+                        ],
+                        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                        spacing=12,
+                        scroll=ft.ScrollMode.AUTO,
+                    ),
+                    padding=ft.Padding(left=20, top=36, right=20, bottom=20),
+                    expand=True,
+                ),
+                ft.Container(
+                    content=ft.ElevatedButton(
+                        f"\U0001f389  {t('popup_close')}",
+                        on_click=_celebrate,
+                        bgcolor=C["pink"],
+                        color=C["bg"],
+                        width=280,
+                        height=52,
+                        style=ft.ButtonStyle(
+                            text_style=ft.TextStyle(
+                                size=18, weight=ft.FontWeight.BOLD,
+                            ),
+                        ),
+                    ),
+                    alignment=ft.alignment.center,
+                    padding=ft.Padding(left=20, top=0, right=20, bottom=32),
+                ),
+            ],
+            expand=True,
+        ))
+
+        # Reproducir sonido solo una vez por sesión de pantalla birthday
+        if not state["_bd_sound_played"]:
+            state["_bd_sound_played"] = True
+            _play_birthday_sound()
+
+    # ─────────────────────────────────────────────────────────────────────
+    # BIRTHDAY POPUP (AlertDialog — kept for reference, not used on Android)
     # FIX: removed tight=True from Columns inside AlertDialog
     # ─────────────────────────────────────────────────────────────────────
     def _birthday_popup(today_contacts):
@@ -2769,13 +2920,21 @@ def main(page: ft.Page):
     import threading as _threading
     today_contacts = [c for c in db.all_contacts() if days_until(c[2], c[3]) == 0]
     if today_contacts and db.get("show_popup", "1") == "1":
-        def _fire_birthday_popup(tc=today_contacts):
-            async def _show():
-                _birthday_popup(tc)
-            page.run_task(_show)
-        _bd_timer = _threading.Timer(3.5, _fire_birthday_popup)
-        _bd_timer.daemon = True
-        _bd_timer.start()
+        _today_str   = str(date.today())
+        _remind_all  = db.get("remind_all_day", "0") == "1"
+        _dismissed   = db.get("birthday_dismissed_date", "") == _today_str
+        # Mostrar si: remind_all_day ON (siempre)  O  todavía no se ha
+        # descartado hoy (dismissed_date != hoy).
+        if _remind_all or not _dismissed:
+            def _fire_birthday_popup(tc=today_contacts):
+                async def _show():
+                    state["_birthday_contacts"] = tc
+                    state["_bd_sound_played"]   = False
+                    navigate("birthday")
+                page.run_task(_show)
+            _bd_timer = _threading.Timer(3.5, _fire_birthday_popup)
+            _bd_timer.daemon = True
+            _bd_timer.start()
 
     # ── Update checker — corre en segundo plano, no bloquea la UI ─────────
     def _check_for_update():

@@ -24,7 +24,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.4.15"
+APP_VERSION = "1.4.16"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -1011,10 +1011,18 @@ def main(page: ft.Page):
                 if cleaned[0]:
                     return
                 cleaned[0] = True
+                # Usar run_task para no llamar page.update() desde un
+                # background thread (threading.Timer) — eso puede corromper
+                # el event loop de Flet y romper la respuesta a eventos UI.
+                async def _do_remove():
+                    try:
+                        if snd_holder[0] is not None and snd_holder[0] in page.overlay:
+                            page.overlay.remove(snd_holder[0])
+                            page.update()
+                    except Exception:
+                        pass
                 try:
-                    if snd_holder[0] is not None and snd_holder[0] in page.overlay:
-                        page.overlay.remove(snd_holder[0])
-                        page.update()
+                    page.run_task(_do_remove)
                 except Exception:
                     pass
 
@@ -2727,43 +2735,12 @@ def main(page: ft.Page):
                 )
             )
 
-        # ── Audio inline: widget FletAudio dentro del Column de la pantalla ──
-        # Se monta en el MISMO page.add() que el árbol visual — sin overlay,
-        # sin threading.Timer extra, sin page.update() adicional.
-        # Se desmonta automáticamente al navegar fuera (page.controls.clear()).
-        _audio_ctl = ft.Container(width=0, height=0)   # placeholder (sin audio)
-        if (not state["_bd_sound_played"] and _AUDIO_AVAILABLE
-                and db.get("sound_popup", "1") == "1"):
-            try:
-                if _WAV_CACHE[0] is None:
-                    _WAV_CACHE[0] = _gen_birthday_wav()
-                _bd_stor = os.environ.get("FLET_APP_STORAGE_DATA", "")
-                if _bd_stor:
-                    _bd_wav = os.path.join(_bd_stor, "celebria_chime.wav")
-                else:
-                    import tempfile as _tmpmod
-                    _bd_wav = os.path.join(_tmpmod.gettempdir(), "celebria_chime.wav")
-                with open(_bd_wav, "wb") as _ff:
-                    _ff.write(_WAV_CACHE[0])
-                _audio_ctl = ft.Container(
-                    content=FletAudio(
-                        src=f"file://{_bd_wav}",
-                        autoplay=True,
-                        volume=0.8,
-                    ),
-                    width=1, height=1, bgcolor="transparent",
-                )
-                state["_bd_sound_played"] = True
-            except Exception as _ex:
-                _toast(f"[Audio] {_ex}")
-
         # Sin appbar ni navbar — pantalla de celebración inmersiva
         page.appbar         = None
         page.navigation_bar = None
 
         page.add(ft.Column(
             controls=[
-                _audio_ctl,   # ← FletAudio invisible, primer hijo del Column
                 ft.Container(
                     content=ft.Column(
                         controls=[
@@ -2815,6 +2792,12 @@ def main(page: ft.Page):
             ],
             expand=True,
         ))
+
+        # Reproducir sonido una vez por sesión de pantalla birthday.
+        # debug=True → toast visible para diagnóstico ("OK" / error exacto)
+        if not state["_bd_sound_played"]:
+            state["_bd_sound_played"] = True
+            _play_birthday_sound(debug=True)
 
     # ─────────────────────────────────────────────────────────────────────
     # BIRTHDAY POPUP (AlertDialog — kept for reference, not used on Android)

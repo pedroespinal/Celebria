@@ -269,6 +269,15 @@ AP = [
     (r'expand\s*=\s*True.*ft\.Column|ft\.Column.*expand\s*=\s*True',
      "INFO",
      "Column(expand=True) detectado — OK si la pantalla lo necesita"),
+
+    # ft.alignment.center (módulo) vs ft.Alignment.CENTER (clase)
+    # ft.alignment NO es exportado por flet/__init__.py en 0.85.1.
+    # Accederlo como atributo de módulo lanza AttributeError GARANTIZADO.
+    (r'\bft\.alignment\.\w+',
+     "ERROR",
+     "ft.alignment.<x> NO existe en Flet 0.85.1 — usa ft.Alignment.CENTER "
+     "(o ft.alignment.top_left etc. solo si importas flet.alignment explícitamente). "
+     "CRASH garantizado en Android."),
 ]
 
 found_ap = 0

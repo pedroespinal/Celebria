@@ -24,7 +24,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.4.10"
+APP_VERSION = "1.4.11"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -2777,7 +2777,7 @@ def main(page: ft.Page):
                         on_click=_celebrate,
                         expand=False,
                     ),
-                    alignment=ft.alignment.center,
+                    alignment=ft.Alignment.CENTER,
                     padding=ft.Padding(left=32, top=0, right=32, bottom=32),
                     width=320,
                 ),

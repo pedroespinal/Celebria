@@ -11,6 +11,40 @@ SRC_FILE = Path(__file__).parent / "main.py"
 src = SRC_FILE.read_text(encoding="utf-8-sig")   # utf-8-sig strips BOM
 lines = src.splitlines()
 
+# Versión del source sin docstrings/strings para checks de código real
+def _strip_strings(text):
+    """Reemplaza contenido de strings con espacios (preserva longitud/líneas)."""
+    result = []
+    i = 0
+    while i < len(text):
+        # Triple-quoted strings
+        for q in ('"""', "'''"):
+            if text[i:i+3] == q:
+                end = text.find(q, i+3)
+                if end == -1:
+                    end = len(text) - 3
+                chunk = text[i:end+3]
+                result.append('\n' * chunk.count('\n'))
+                i = end + 3
+                break
+        else:
+            # Single-quoted strings (non-greedy, single line)
+            if text[i] in ('"', "'"):
+                q = text[i]
+                j = i + 1
+                while j < len(text) and text[j] != q and text[j] != '\n':
+                    if text[j] == '\\':
+                        j += 1
+                    j += 1
+                result.append(' ' * (j - i + 1))
+                i = j + 1
+            else:
+                result.append(text[i])
+                i += 1
+    return ''.join(result)
+
+src_code_only = _strip_strings(src)   # para checks de código real (sin docstrings)
+
 errors   = []
 warnings = []
 infos    = []
@@ -125,12 +159,19 @@ ASYNC_AUDIO_METHODS = ["play", "pause", "resume", "seek", "release",
                        "get_current_position", "get_duration"]
 
 for method in ASYNC_AUDIO_METHODS:
-    for m in re.finditer(rf'\b(\w+)\.{method}\s*\(', src):
+    for m in re.finditer(rf'\b(\w+)\.{method}\s*\(', src_code_only):
         pos = m.start()
         ln  = src[:pos].count('\n') + 1
         line = lines[ln-1].strip()
-        # Skip comments and definitions
+        # Skip comments, definitions, inline comments, and docstrings
         if skip_comments(line) or line.startswith('def ') or line.startswith('async def '):
+            continue
+        # Skip if inside a comment portion of the line (after #)
+        code_part = line.split('#')[0]
+        if method + '()' not in code_part and method + '(' not in code_part:
+            continue
+        # Skip if inside a string literal (docstring) — check if line is quoted
+        if line.startswith('"""') or line.startswith("'''") or line.startswith('"') or line.startswith("'"):
             continue
         # Skip if already awaited
         pre = src[max(0, pos-30):pos]
@@ -347,12 +388,15 @@ else:
     if not has_audio_internal and not has_audio_pre_nav:
         E("Sin lógica de audio en main.py — no habrá sonido en el popup")
     elif has_audio_internal:
-        # Verificar que usa Timer (no llamada directa que compite con page.add)
-        if 'Timer' in bd_body:
-            I("_show_birthday() usa threading.Timer para audio (patrón correcto v1.4.18) ✓")
+        # v1.4.19+: widget persistente en overlay — llamada directa es correcta
+        # porque page.run_task(snd.play) schedula DESPUÉS de que el handler retorna
+        if '_PERSISTENT_AUDIO' in src or 'page.run_task' in bd_body:
+            I("_show_birthday() llama _play_birthday_sound() directamente (widget persistente, patrón v1.4.19) ✓")
+        elif 'Timer' in bd_body:
+            I("_show_birthday() usa threading.Timer para audio ✓")
         else:
-            W("_show_birthday() llama _play_birthday_sound() directamente (sin Timer delay) — "
-              "puede no funcionar si Flutter aún está procesando el page.add()")
+            W("_show_birthday() llama _play_birthday_sound() sin Timer ni widget persistente — "
+              "puede fallar si Flutter aún procesa page.add()")
 
 # ──────────────────────────────────────────────────────────────
 # 11. BIRTHDAY TIMER — secuencia correcta

@@ -22,7 +22,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.4.25"
+APP_VERSION = "1.4.26"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -1620,27 +1620,26 @@ def main(page: ft.Page):
             state["_rel_for"] = None
             navigate("home")
 
-        def on_delete(e):
-            def do_del(e2):
-                _close_dlg()
-                db.delete(state["edit_id"])
-                state["edit_id"]  = None
-                state["rel"]      = "friend"
-                state["photo"]    = ""
-                state["_rel_for"] = None
-                navigate("home")
-            dlg = ft.AlertDialog(
-                modal=True,
-                bgcolor=C["bg2"],
-                title=ft.Text(t("confirm_delete"), color=C["yellow"]),
-                actions=[
-                    ft.TextButton(t("confirm_no"),  on_click=lambda e: _close_dlg(),
-                                  style=ft.ButtonStyle(color=C["t3"])),
-                    ft.TextButton(t("confirm_yes"), on_click=do_del,
-                                  style=ft.ButtonStyle(color=C["red"])),
-                ],
-            )
-            _open_dlg(dlg)
+        # Confirmacion de eliminacion — inline, sin AlertDialog.
+        # AlertDialog falla en Android con Flet 0.85.1 (mismo problema
+        # que obligó a crear _show_birthday() como pantalla completa).
+        def _do_delete(e):
+            db.delete(state["edit_id"])
+            state["edit_id"]  = None
+            state["rel"]      = "friend"
+            state["photo"]    = ""
+            state["_rel_for"] = None
+            navigate("home")
+
+        def _show_del_confirm(e):
+            del_btn.visible     = False
+            del_confirm.visible = True
+            page.update()
+
+        def _hide_del_confirm(e):
+            del_btn.visible     = True
+            del_confirm.visible = False
+            page.update()
 
         def _set_rel(rv):
             state["rel"] = rv
@@ -1690,10 +1689,29 @@ def main(page: ft.Page):
             btn_row,
         ]
         if editing:
-            controls.append(
-                _btn(f"\U0001f5d1  {t('btn_delete')}", C["red"],
-                     on_click=on_delete, expand=True)
+            del_btn = _btn(
+                f"\U0001f5d1  {t('btn_delete')}", C["red"],
+                on_click=_show_del_confirm, expand=True,
             )
+            del_confirm = ft.Container(
+                visible=False,
+                bgcolor=C["bg3"],
+                border_radius=10,
+                padding=ft.Padding(left=12, top=12, right=12, bottom=12),
+                content=ft.Column([
+                    ft.Text(
+                        t("confirm_delete"), color=C["yellow"], size=13,
+                        text_align=ft.TextAlign.CENTER,
+                        weight=ft.FontWeight.W_600,
+                    ),
+                    ft.Row([
+                        _btn(t("confirm_no"),  C["t3"], on_click=_hide_del_confirm, expand=True),
+                        _btn(t("confirm_yes"), C["red"], on_click=_do_delete,       expand=True),
+                    ], spacing=8),
+                ], spacing=10),
+            )
+            controls.append(del_btn)
+            controls.append(del_confirm)
         controls += [_footer(), ft.Container(height=16)]
 
         page.add(ft.Column(

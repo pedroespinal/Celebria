@@ -6,6 +6,12 @@ Creado por: Pedro Espinal  Todos los derechos reservados (c) 2025
 """
 
 import flet as ft
+try:
+    from flet_audio import Audio as FletAudio
+    _AUDIO_OK = True
+except ImportError:
+    FletAudio = None
+    _AUDIO_OK = False
 import sqlite3
 import json
 import os
@@ -16,7 +22,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.4.23"
+APP_VERSION = "1.4.24"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -574,6 +580,31 @@ def _parse_vcf(content: str) -> list:
                 current["phone"] = phone
 
     return result
+
+
+# ── Birthday WAV (generado en memoria — sin archivos ni HTTP server) ──────────
+def _gen_birthday_wav() -> bytes:
+    import wave, struct, math, io
+    SR = 44100
+    def _note(freq, dur, vol=0.68):
+        n = int(SR * dur)
+        out = []
+        for i in range(n):
+            t   = i / SR
+            env = min(1.0, i / (SR * 0.012)) * max(0.0, 1.0 - (i / n) ** 0.6 * 0.55)
+            v   = env * vol * (math.sin(2*math.pi*freq*t)*0.70 +
+                               math.sin(4*math.pi*freq*t)*0.20 +
+                               math.sin(6*math.pi*freq*t)*0.10)
+            out.append(struct.pack('<h', max(-32767, min(32767, int(v * 32767)))))
+        return b''.join(out)
+    frames = b''.join(_note(f, d) for f, d in [
+        (392,0.22),(392,0.12),(440,0.34),(392,0.34),(523,0.34),(494,0.58)
+    ]) + b'\x00\x00' * int(SR * 0.08)
+    buf = io.BytesIO()
+    with wave.open(buf, 'w') as wf:
+        wf.setnchannels(1); wf.setsampwidth(2); wf.setframerate(SR)
+        wf.writeframes(frames)
+    return buf.getvalue()
 
 
 # ── Help content (bilingual) ──────────────────────────────────────────────────
@@ -1229,6 +1260,14 @@ def main(page: ft.Page):
         page.controls.clear()
         page.appbar = None
         page.navigation_bar = None
+        # Cerrar cualquier AlertDialog que haya quedado abierto en overlay
+        for _od in list(page.overlay):
+            if isinstance(_od, ft.AlertDialog):
+                try: _od.open = False
+                except Exception: pass
+                try: page.overlay.remove(_od)
+                except Exception: pass
+        _dlg_stack.clear()
         page.bgcolor    = C["bg"]
         page.theme_mode = ft.ThemeMode.LIGHT if THEME[0] == "light" else ft.ThemeMode.DARK
         scr = state["screen"]
@@ -2661,6 +2700,8 @@ def main(page: ft.Page):
         _ct.daemon = True
         _ct.start()
 
+        _play_birthday_sound()
+
     # ─────────────────────────────────────────────────────────────────────
     # BIRTHDAY POPUP (AlertDialog — kept for reference, not used on Android)
     # FIX: removed tight=True from Columns inside AlertDialog
@@ -2750,6 +2791,11 @@ def main(page: ft.Page):
     vcf_picker  = ft.FilePicker()   # importar .vcf e importar .json
     img_picker  = ft.FilePicker()   # seleccionar foto
     save_picker = ft.FilePicker()   # exportar JSON (save_file)
+    # Audio de cumpleaños — declarado ANTES de render() igual que los pickers.
+    # Se registra DESPUÉS de render() para que Flutter esté listo.
+    # Para el momento en que aparece la pantalla de cumpleaños (≥3.5 s),
+    # el audio ya está completamente cargado → play() funciona sin race condition.
+    _bd_snd = FletAudio(src=_gen_birthday_wav(), volume=1.0) if _AUDIO_OK else None
 
     # ── Initial render ────────────────────────────────────────────────────
     render()
@@ -2763,16 +2809,35 @@ def main(page: ft.Page):
         page._services.register_service(vcf_picker)
         page._services.register_service(img_picker)
         page._services.register_service(save_picker)
+        if _bd_snd:
+            page._services.register_service(_bd_snd)
     except Exception:
         try:
+            _extra = []
+            if _bd_snd:
+                # visible=False mata el audio; 1px transparente lo mantiene vivo
+                _extra.append(ft.Container(content=_bd_snd, width=1, height=1,
+                                           bgcolor="transparent"))
             page.overlay.extend([
                 ft.Container(content=vcf_picker,  visible=False),
                 ft.Container(content=img_picker,  visible=False),
                 ft.Container(content=save_picker, visible=False),
+                *_extra,
             ])
             page.update()
         except Exception:
             pass
+
+    def _play_birthday_sound():
+        """Llama play() en el widget de audio pre-cargado al arrancar la app."""
+        if _bd_snd is None:
+            return
+        async def _do():
+            try:
+                await _bd_snd.play()
+            except Exception:
+                pass
+        page.run_task(_do)
 
     # Birthday popup — delay via threading.Timer (same pattern as update dialog).
     # page.show_dialog() fails silently on Android if called immediately after

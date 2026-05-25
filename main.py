@@ -6,14 +6,6 @@ Creado por: Pedro Espinal  Todos los derechos reservados (c) 2025
 """
 
 import flet as ft
-try:
-    from flet_audio import Audio as FletAudio
-    from flet_audio import AudioState as _AudioState
-    _AUDIO_AVAILABLE = True
-except ImportError:
-    FletAudio = None
-    _AudioState = None
-    _AUDIO_AVAILABLE = False
 import sqlite3
 import json
 import os
@@ -24,7 +16,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.4.22"
+APP_VERSION = "1.4.23"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -160,11 +152,8 @@ T = {
         "manual_btn":     "Manual de Usuario",
         "back_settings":  "Volver a Configuración",
         "set_popup":      "Popup de cumpleaños",
-        "set_sound":      "Sonido festivo",
         "opt_show":       "Mostrar",
         "opt_hide":       "Ocultar",
-        "opt_sound_on":   "Con música",
-        "opt_sound_off":  "Sin música",
         "months": [
             "", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
             "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
@@ -284,11 +273,8 @@ T = {
         "manual_btn":     "User Manual",
         "back_settings":  "Back to Settings",
         "set_popup":      "Birthday popup",
-        "set_sound":      "Party chime",
         "opt_show":       "Show",
         "opt_hide":       "Hide",
-        "opt_sound_on":   "With music",
-        "opt_sound_off":  "Silent",
         "months": [
             "", "January", "February", "March", "April", "May", "June",
             "July", "August", "September", "October", "November", "December",
@@ -590,51 +576,6 @@ def _parse_vcf(content: str) -> list:
     return result
 
 
-# ── Birthday chime — bundled as assets/chime.wav ─────────────────────────────
-# El archivo se genera offline y se incluye en el APK como asset de Flet.
-# Flet lo sirve via HTTP server interno: src="/chime.wav" → Flutter lo carga
-# sin problemas de file:// ni permisos de almacenamiento en Android.
-def _gen_birthday_wav() -> bytes:
-    """Return WAV bytes for the Happy Birthday chime (first phrase)."""
-    import wave, struct, math, io
-    SR = 44100
-
-    def gen_note(freq, dur, vol=0.68):
-        n = int(SR * dur)
-        frames = []
-        for i in range(n):
-            t = i / SR
-            attack  = min(1.0, i / (SR * 0.012))
-            release = max(0.0, 1.0 - (i / n) ** 0.6 * 0.55)
-            env = attack * release
-            v = env * vol * (
-                math.sin(2 * math.pi * freq * t) * 0.70 +
-                math.sin(4 * math.pi * freq * t) * 0.20 +
-                math.sin(6 * math.pi * freq * t) * 0.10
-            )
-            frames.append(struct.pack('<h', max(-32767, min(32767, int(v * 32767)))))
-        return b''.join(frames)
-
-    # Happy Birthday — G4 G4 A4 G4 C5 B4
-    notes = [
-        (392, 0.22), (392, 0.12), (440, 0.34),
-        (392, 0.34), (523, 0.34), (494, 0.58),
-    ]
-    audio_frames  = b''.join(gen_note(f, d) for f, d in notes)
-    audio_frames += b'\x00\x00' * int(SR * 0.08)   # tiny tail silence
-
-    buf = io.BytesIO()
-    with wave.open(buf, 'w') as wf:
-        wf.setnchannels(1)
-        wf.setsampwidth(2)
-        wf.setframerate(SR)
-        wf.writeframes(audio_frames)
-    return buf.getvalue()
-
-
-# (no module-level audio state needed — widget se crea fresco en cada play)
-
-
 # ── Help content (bilingual) ──────────────────────────────────────────────────
 _HELP_ES = [
     ("\U0001f382", "¿Qué es Celebria?",
@@ -678,10 +619,7 @@ _HELP_ES = [
      "  6:00 · 7:00 · 8:00 · 9:00 · 10:00 · 12:00\n\n"
      "\U0001f382 Popup de cumpleaños — activa o desactiva el aviso visual\n"
      "al abrir la app el día del cumpleaños:\n"
-     "  \U0001f382 Mostrar  ·  \U0001f6ab Ocultar\n\n"
-     "\U0001f514 Sonido de cumpleaños — activa o desactiva la melodía\n"
-     "que suena al aparecer el popup:\n"
-     "  \U0001f514 Con sonido  ·  \U0001f515 Sin sonido"),
+     "  \U0001f382 Mostrar  ·  \U0001f6ab Ocultar"),
     ("\U0001f4c5", "Calendario de cumpleaños",
      "Toca Calendario en la barra inferior.\n\n"
      "• Los días con cumpleaños aparecen resaltados en rosa con \U0001f382.\n"
@@ -835,10 +773,7 @@ _HELP_EN = [
      "  6:00 · 7:00 · 8:00 · 9:00 · 10:00 · 12:00\n\n"
      "\U0001f382 Birthday popup — enable or disable the visual alert\n"
      "shown when you open the app on someone's birthday:\n"
-     "  \U0001f382 Show  ·  \U0001f6ab Hide\n\n"
-     "\U0001f514 Birthday sound — enable or disable the short melody\n"
-     "that plays when the popup appears:\n"
-     "  \U0001f514 Sound on  ·  \U0001f515 Sound off"),
+     "  \U0001f382 Show  ·  \U0001f6ab Hide"),
     ("\U0001f4c5", "Birthday calendar",
      "Tap Calendar in the bottom bar.\n\n"
      "• Days with birthdays are highlighted in pink with \U0001f382.\n"
@@ -980,61 +915,7 @@ def main(page: ft.Page):
         "_rel_for":           None,   # tracks which edit_id loaded rel from DB
         "photo":              "",     # foto temporal durante add/edit
         "_birthday_contacts": [],     # contactos que cumplen hoy (para pantalla)
-        "_bd_sound_played":   False,  # evita reproducir el sonido dos veces
     }
-
-    def _play_birthday_sound():
-        """Reproduce el chime de cumpleaños.
-
-        Estrategia v1.4.21:
-        - src=bytes  → audioplayers.setSourceBytes() — sin HTTP server, sin file://,
-          sin permisos de almacenamiento.  Funciona en todos los Android.
-        - page._services.register_service(snd) → forma correcta de montar un
-          ft.Service en Flet 0.85.1.  page.overlay es para controles visuales,
-          no para servicios.
-        - on_loaded callback → snd.play() se llama DESPUÉS de que audioplayers
-          confirma que los bytes están cargados.  Más confiable que autoplay=True,
-          que puede dispararse antes de que el source esté listo.
-        - Fallback: si _services falla, 1px Container transparente en overlay —
-          mantiene el widget montado (visible=False lo desmontaría, ver quirk).
-        """
-        if not _AUDIO_AVAILABLE:
-            if debug: _toast("flet_audio no disponible / not available")
-            return
-        if db.get("sound_popup", "1") != "1":
-            if debug: _toast("Sonido OFF en ajustes / Sound OFF in settings")
-            return
-
-        async def _do_play():
-            try:
-                page.overlay[:] = [
-                    c for c in page.overlay
-                    if not isinstance(c, FletAudio) and
-                       not isinstance(getattr(c, "content", None), FletAudio)
-                ]
-
-                snd = FletAudio(src=_gen_birthday_wav(), volume=1.0)
-
-                async def _on_loaded(e):
-                    try:
-                        await snd.play()
-                    except Exception:
-                        pass
-
-                snd.on_loaded = _on_loaded
-
-                try:
-                    page._services.register_service(snd)
-                except Exception:
-                    page.overlay.append(
-                        ft.Container(content=snd, width=1, height=1, bgcolor="transparent")
-                    )
-
-                page.update()
-            except Exception:
-                pass
-
-        page.run_task(_do_play)
 
     # ── Avatar helper ─────────────────────────────────────────────────────
     def _avatar(photo, name, relation, size=44):
@@ -2367,10 +2248,7 @@ def main(page: ft.Page):
 
     # ── Test-popup helper (called from Settings button) ───────────────────
     def _do_test_popup():
-        """Navega a la pantalla de cumpleaños inmediatamente (botón de prueba).
-        Usa contactos con cumpleaños HOY si existen; si no, usa un contacto
-        de demo para verificar que la pantalla y el sonido funcionan.
-        """
+        """Navega a la pantalla de cumpleaños inmediatamente (botón de prueba)."""
         try:
             tc = [c for c in db.all_contacts() if days_until(c[2], c[3]) == 0]
             if not tc:
@@ -2380,7 +2258,6 @@ def main(page: ft.Page):
                 tc = [(0, t("test_popup_demo"), _today.day, _today.month,
                        _today.year - 30, "", "", "", "friend", "", "")]
             state["_birthday_contacts"] = tc
-            state["_bd_sound_played"]   = False  # _show_birthday lo reproduce
             navigate("birthday")
         except Exception as _ex:
             _toast(f"Error al probar popup: {_ex}")
@@ -2537,17 +2414,6 @@ def main(page: ft.Page):
                 _opt_btn(f"\U0001f6ab  {t('opt_hide')}",
                          db.get("show_popup", "1") == "0",
                          lambda e: _toggle_setting("show_popup")),
-            ], spacing=10),
-
-            # ── Sound toggle ──────────────────────────────────────────────
-            _sec(t("set_sound")),
-            ft.Row([
-                _opt_btn(f"\U0001f514  {t('opt_sound_on')}",
-                         db.get("sound_popup", "1") == "1",
-                         lambda e: _toggle_setting("sound_popup")),
-                _opt_btn(f"\U0001f515  {t('opt_sound_off')}",
-                         db.get("sound_popup", "1") == "0",
-                         lambda e: _toggle_setting("sound_popup")),
             ], spacing=10),
 
             # ── Remind all day ────────────────────────────────────────────
@@ -2795,10 +2661,6 @@ def main(page: ft.Page):
         _ct.daemon = True
         _ct.start()
 
-        if not state["_bd_sound_played"]:
-            state["_bd_sound_played"] = True
-            _play_birthday_sound()
-
     # ─────────────────────────────────────────────────────────────────────
     # BIRTHDAY POPUP (AlertDialog — kept for reference, not used on Android)
     # FIX: removed tight=True from Columns inside AlertDialog
@@ -2875,7 +2737,6 @@ def main(page: ft.Page):
                 ],
                 actions_alignment=ft.MainAxisAlignment.CENTER,
             )
-            _play_birthday_sound()
             _open_dlg(dlg)
         except Exception as _ex:
             _toast(f"Popup error: {_ex}")
@@ -2934,7 +2795,6 @@ def main(page: ft.Page):
             def _fire_birthday_popup(tc=today_contacts):
                 async def _show():
                     state["_birthday_contacts"] = tc
-                    state["_bd_sound_played"]   = False  # _show_birthday lo reproduce
                     navigate("birthday")
                 page.run_task(_show)
             _bd_timer = _threading.Timer(3.5, _fire_birthday_popup)

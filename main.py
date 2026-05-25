@@ -22,7 +22,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.4.24"
+APP_VERSION = "1.4.25"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -991,9 +991,12 @@ def main(page: ft.Page):
             d = _dlg_stack.pop()
             try:
                 d.open = False
+                page.update()   # primero: Flutter recibe open=False y hace pop del navigator
+            except Exception:
+                pass
+            try:
                 if d in page.overlay:
                     page.overlay.remove(d)
-                page.update()
             except Exception:
                 pass
 

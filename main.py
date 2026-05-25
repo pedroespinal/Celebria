@@ -24,7 +24,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.4.21"
+APP_VERSION = "1.4.22"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -983,7 +983,7 @@ def main(page: ft.Page):
         "_bd_sound_played":   False,  # evita reproducir el sonido dos veces
     }
 
-    def _play_birthday_sound(debug=False):
+    def _play_birthday_sound():
         """Reproduce el chime de cumpleaños.
 
         Estrategia v1.4.21:
@@ -1007,37 +1007,32 @@ def main(page: ft.Page):
 
         async def _do_play():
             try:
-                # Limpiar widgets FletAudio del overlay (tanto directos como en Container)
                 page.overlay[:] = [
                     c for c in page.overlay
                     if not isinstance(c, FletAudio) and
                        not isinstance(getattr(c, "content", None), FletAudio)
                 ]
 
-                wav_bytes = _gen_birthday_wav()
-                snd = FletAudio(src=wav_bytes, volume=1.0)
+                snd = FletAudio(src=_gen_birthday_wav(), volume=1.0)
 
                 async def _on_loaded(e):
                     try:
                         await snd.play()
-                        if debug: _toast("OK — sonando!")
-                    except Exception as ex:
-                        if debug: _toast(f"[snd.play] {ex}")
+                    except Exception:
+                        pass
 
                 snd.on_loaded = _on_loaded
 
-                # Registrar como servicio (correcto para ft.Service en Flet 0.85.1)
                 try:
                     page._services.register_service(snd)
                 except Exception:
-                    # Fallback: 1px Container transparente mantiene el widget montado
                     page.overlay.append(
                         ft.Container(content=snd, width=1, height=1, bgcolor="transparent")
                     )
 
                 page.update()
-            except Exception as ex:
-                if debug: _toast(f"[Audio] {ex}")
+            except Exception:
+                pass
 
         page.run_task(_do_play)
 
@@ -2677,9 +2672,10 @@ def main(page: ft.Page):
             navigate("home")
             return
 
+        _confetti_running = [True]
+
         def _celebrate(e):
-            # Si remind_all_day está OFF → guardar fecha de hoy para no
-            # mostrar la pantalla de nuevo al reabrir la app hoy.
+            _confetti_running[0] = False
             if db.get("remind_all_day", "0") == "0":
                 db.set("birthday_dismissed_date", str(date.today()))
             navigate("home")
@@ -2719,6 +2715,10 @@ def main(page: ft.Page):
         page.appbar         = None
         page.navigation_bar = None
 
+        _confetti_txt = ft.Text(
+            "", size=24, text_align=ft.TextAlign.CENTER,
+        )
+
         page.add(ft.Column(
             controls=[
                 ft.Container(
@@ -2741,6 +2741,7 @@ def main(page: ft.Page):
                                 size=13, color=C["t2"],
                                 text_align=ft.TextAlign.CENTER,
                             ),
+                            _confetti_txt,
                             ft.Container(height=2, bgcolor=C["pink"],
                                          border_radius=1),
                             *contact_cards,
@@ -2756,8 +2757,6 @@ def main(page: ft.Page):
                     padding=ft.Padding(left=20, top=36, right=20, bottom=20),
                     expand=True,
                 ),
-                # FIX: usa _btn() — ft.ElevatedButton con text_style= no existe
-                # en Flet 0.85.1 y crashea la pantalla (mismo bug que _field)
                 ft.Container(
                     content=_btn(
                         f"\U0001f389  {t('popup_close')}",
@@ -2773,13 +2772,32 @@ def main(page: ft.Page):
             expand=True,
         ))
 
-        # Reproducir sonido: _play_birthday_sound() crea un FletAudio fresco con
-        # src="/chime.wav" (asset bundleado) y autoplay=True, lo agrega directo
-        # a page.overlay via page.run_task() — se ejecuta DESPUÉS de que este
-        # handler retorna, cuando la pantalla birthday ya está estable.
+        # Confeti animado: emojis aparecen uno a uno cada 220 ms
+        import threading as _thr
+        _CONFETTI = [
+            "\U0001f389", "\U0001f38a", "\U0001f388", "\U0001f381", "✨",
+            "\U0001f389", "\U0001f38a", "\U0001f388", "\U0001f381", "✨",
+        ]
+
+        def _confetti_step(i=0):
+            if not _confetti_running[0] or i >= len(_CONFETTI):
+                return
+            _confetti_txt.value = "  ".join(_CONFETTI[:i + 1])
+            try:
+                page.update()
+            except Exception:
+                return
+            _nt = _thr.Timer(0.22, _confetti_step, [i + 1])
+            _nt.daemon = True
+            _nt.start()
+
+        _ct = _thr.Timer(0.5, _confetti_step, [0])
+        _ct.daemon = True
+        _ct.start()
+
         if not state["_bd_sound_played"]:
             state["_bd_sound_played"] = True
-            _play_birthday_sound(debug=True)
+            _play_birthday_sound()
 
     # ─────────────────────────────────────────────────────────────────────
     # BIRTHDAY POPUP (AlertDialog — kept for reference, not used on Android)

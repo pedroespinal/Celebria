@@ -22,7 +22,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.4.26"
+APP_VERSION = "1.5.0"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -638,10 +638,10 @@ _HELP_ES = [
      "  \U0001f5d3 Próximamente — próximos 8–30 días\n"
      "  \U0001f465 Todos — el resto del año"),
     ("\U0001f514", "Notificaciones automáticas",
-     "Celebria revisa los cumpleaños cada vez que abres la app y muestra "
-     "un popup con los contactos que cumplen años hoy.\n\n"
-     "Para notificaciones en segundo plano sin abrir la app, configura un "
-     "recordatorio manual en la app de Alarmas de tu teléfono."),
+     "Celebria envía notificaciones automáticas incluso con la app cerrada.\n\n"
+     "Cada vez que abres la app, se programan los avisos para todos tus "
+     "contactos según la hora y días de anticipación que hayas configurado.\n\n"
+     "También aparece un popup dentro de la app el día del cumpleaños."),
     ("⚙", "Configurar notificaciones",
      "Ve a Configuración:\n\n"
      "Días de anticipación — elige cuándo quieres el aviso:\n"
@@ -792,10 +792,10 @@ _HELP_EN = [
      "  \U0001f5d3 Coming Soon — next 8–30 days\n"
      "  \U0001f465 All — the rest of the year"),
     ("\U0001f514", "Automatic notifications",
-     "Celebria checks birthdays every time you open the app and shows "
-     "a popup for any contacts whose birthday is today.\n\n"
-     "For background reminders without opening the app, set a manual "
-     "reminder in your phone's Clock or Alarm app."),
+     "Celebria sends notifications automatically even when the app is closed.\n\n"
+     "Every time you open the app, reminders are scheduled for all your "
+     "contacts based on your configured hour and advance days.\n\n"
+     "A birthday popup also appears inside the app on the day itself."),
     ("⚙", "Configuring notifications",
      "Go to Settings:\n\n"
      "Advance days — choose when to be notified:\n"

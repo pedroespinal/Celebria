@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:path/path.dart' as path_pkg;
 import 'package:path_provider/path_provider.dart' as path_provider;
 import 'package:sqflite/sqflite.dart';
@@ -19,23 +20,41 @@ class NotificationHelper {
     _initialized = true;
 
     try {
+      // Load timezone database and set device local timezone
       tz_data.initializeTimeZones();
+      try {
+        final String timeZoneName = await FlutterTimezone.getLocalTimezone();
+        tz.setLocalLocation(tz.getLocation(timeZoneName));
+        debugPrint('[Celebria] Timezone set to: $timeZoneName');
+      } catch (tzErr) {
+        debugPrint('[Celebria] Timezone init failed, using UTC fallback: $tzErr');
+      }
 
       const initSettings = InitializationSettings(
         android: AndroidInitializationSettings('@mipmap/ic_launcher'),
       );
-      await _notif.initialize(initSettings);
+      await _notif.initialize(
+        initSettings,
+        onDidReceiveNotificationResponse: (NotificationResponse response) {
+          // Notification tapped while app is open — no-op for now
+          debugPrint('[Celebria] Notification tapped: ${response.id}');
+        },
+        onDidReceiveBackgroundNotificationResponse: _onBackgroundNotification,
+      );
 
       // Create the notification channel (Android 8+)
       final androidPlugin = _notif
           .resolvePlatformSpecificImplementation<
               AndroidFlutterLocalNotificationsPlugin>();
+
       await androidPlugin?.createNotificationChannel(
         const AndroidNotificationChannel(
           'celebria_birthdays',
           'Birthday Reminders',
           description: 'Daily birthday reminders from Celebria',
           importance: Importance.high,
+          enableVibration: true,
+          playSound: true,
         ),
       );
 
@@ -48,12 +67,32 @@ class NotificationHelper {
     }
   }
 
+  @pragma('vm:entry-point')
+  static void _onBackgroundNotification(NotificationResponse response) {
+    debugPrint('[Celebria] Background notification tapped: ${response.id}');
+  }
+
+  // ── Returns whether notifications permission is granted ──────────────────────
+  static Future<bool> areNotificationsEnabled() async {
+    try {
+      final androidPlugin = _notif
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>();
+      final granted =
+          await androidPlugin?.areNotificationsEnabled() ?? false;
+      return granted;
+    } catch (_) {
+      return false;
+    }
+  }
+
   // ── Schedule one notification per upcoming birthday (next 365 days) ─────────
-  static Future<void> scheduleFromDB() async {
+  static Future<int> scheduleFromDB() async {
+    int scheduled = 0;
     try {
       final docsDir = await path_provider.getApplicationDocumentsDirectory();
       final dbPath = path_pkg.join(docsDir.path, 'celebria.db');
-      if (!File(dbPath).existsSync()) return;
+      if (!File(dbPath).existsSync()) return 0;
 
       final db = await openDatabase(dbPath, readOnly: true);
 
@@ -73,7 +112,7 @@ class NotificationHelper {
       await _notif.cancelAll();
 
       final now = DateTime.now();
-      int notifId = 3000; // base ID for birthday notifications
+      int notifId = 3000;
 
       for (final row in contacts) {
         final name = (row['name'] as String?) ?? '';
@@ -91,7 +130,6 @@ class NotificationHelper {
         // Age the person will turn on their birthday
         int? age;
         if (birthYear != null && birthYear > 0) {
-          // birthday date = notifDt + notifDays days
           final birthdayDt = notifDt.add(Duration(days: notifDays));
           age = birthdayDt.year - birthYear;
           if (age < 0) age = null;
@@ -106,11 +144,13 @@ class NotificationHelper {
                 ? 'Prepara tu felicitación con tiempo 😊'
                 : 'Prepare your wishes in advance 😊');
 
+        final tzNotifDt = tz.TZDateTime.from(notifDt, tz.local);
+
         await _notif.zonedSchedule(
           notifId++,
           title,
           body,
-          tz.TZDateTime.from(notifDt, tz.local),
+          tzNotifDt,
           const NotificationDetails(
             android: AndroidNotificationDetails(
               'celebria_birthdays',
@@ -119,19 +159,21 @@ class NotificationHelper {
               importance: Importance.high,
               priority: Priority.high,
               icon: '@mipmap/ic_launcher',
+              enableVibration: true,
             ),
           ),
-          // inexactAllowWhileIdle: no SCHEDULE_EXACT_ALARM permission needed;
-          // fires within ~1 hour of target time even in Doze mode — fine for birthdays.
+          // inexactAllowWhileIdle: fires within ~1 hour even in Doze mode.
+          // Does not require SCHEDULE_EXACT_ALARM permission.
           androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
         );
+        scheduled++;
       }
 
-      debugPrint(
-          '[Celebria] Scheduled ${notifId - 3000} birthday notification(s).');
+      debugPrint('[Celebria] Scheduled $scheduled birthday notification(s).');
     } catch (e) {
       debugPrint('[Celebria] scheduleFromDB error: $e');
     }
+    return scheduled;
   }
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -161,17 +203,18 @@ class NotificationHelper {
     }
   }
 
-  // Returns the DateTime when the notification should fire, or null if no
-  // upcoming occurrence within the next 365 days (+1 year fallback).
+  // Returns the next DateTime when the notification should fire, or null if
+  // there is no upcoming occurrence within the next 2 years.
   static DateTime? _nextNotifDateTime(
       int day, int month, int notifDays, int hour, DateTime now) {
     for (int offset = 0; offset <= 1; offset++) {
       try {
         final birthday = DateTime(now.year + offset, month, day);
+        final notifDay = birthday.subtract(Duration(days: notifDays));
         final candidate = DateTime(
-          birthday.subtract(Duration(days: notifDays)).year,
-          birthday.subtract(Duration(days: notifDays)).month,
-          birthday.subtract(Duration(days: notifDays)).day,
+          notifDay.year,
+          notifDay.month,
+          notifDay.day,
           hour,
           0,
           0,

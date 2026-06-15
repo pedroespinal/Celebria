@@ -10,9 +10,15 @@ adaptive_icon_background = "#07071a"
 min_sdk_version          = 24
 target_sdk_version       = 35
 icon                     = "assets/icon.png"
-permissions              = [
-  "android.permission.POST_NOTIFICATIONS",
-  "android.permission.RECEIVE_BOOT_COMPLETED",
-  "android.permission.VIBRATE",
-  "android.permission.WAKE_LOCK",
-]
+
+[tool.flet.android.permission]
+"android.permission.POST_NOTIFICATIONS"  = true
+"android.permission.RECEIVE_BOOT_COMPLETED" = true
+"android.permission.VIBRATE"             = true
+"android.permission.WAKE_LOCK"           = true
+
+[tool.flet.flutter.pubspec.dependencies]
+flutter_local_notifications = "^18.0.1"
+flutter_timezone = "^3.0.0"
+sqflite = "^2.3.3+1"
+timezone = "^0.9.4"

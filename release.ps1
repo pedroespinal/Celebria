@@ -95,17 +95,62 @@ $vjNew = [ordered]@{
     [System.Text.Encoding]::UTF8)
 Write-Host "      OK  (minimum=$($vjCurrent.minimum))"
 
-# -- 2. Compilar APK ----------------------------------------------------------
+# -- 2. Compilar APK (paso 1: Flet genera bundle Python + template Flutter) ---
 Write-Host ""
-Write-Host "[2/5] Compilando APK..."
+Write-Host "[2/6] Compilando APK (bundle Python + template Flutter)..."
 $env:PYTHONIOENCODING = "utf-8"
 $env:PYTHONUTF8 = "1"
 $env:NO_COLOR = "1"
 chcp 65001 | Out-Null
 flet build apk --artifact "Celebria-$Version" 2>&1 | Out-Null
-if (-not (Test-Path $APK)) { Write-Error "Fallo la compilacion - APK no encontrado."; exit 1 }
+if (-not (Test-Path $APK)) { Write-Error "Fallo el bundle Python (flet build apk) - APK no encontrado."; exit 1 }
+Write-Host "      OK - bundle Python listo"
+
+# -- 2.5. Recompilar Flutter con codigo de notificaciones push ----------------
+# flet build apk genera su propio main.dart (sin notificaciones) y no incluye
+# los paquetes de flutter/pubspec.yaml. Este paso los inyecta y recompila.
+Write-Host ""
+Write-Host "[2.5/6] Aplicando notificaciones push y recompilando Flutter..."
+
+# Copiar archivos Dart personalizados sobre el template de Flet
+Copy-Item "flutter\lib\main.dart"               "build\flutter\lib\main.dart"               -Force
+Copy-Item "flutter\lib\notification_helper.dart" "build\flutter\lib\notification_helper.dart" -Force
+Copy-Item "flutter\android\AndroidManifest.xml"  `
+    "build\flutter\android\app\src\main\AndroidManifest.xml" -Force -ErrorAction SilentlyContinue
+
+# Asegurar que los paquetes de notificaciones esten en pubspec.yaml
+# (Flet los borra al regenerar el template)
+$pubspecPath = "$PWD\build\flutter\pubspec.yaml"
+$pubspecContent = Get-Content $pubspecPath -Raw -Encoding UTF8
+if ($pubspecContent -notmatch "flutter_local_notifications") {
+    $toInsert = "  flutter_local_notifications: ^18.0.1`r`n  flutter_timezone: ^3.0.0`r`n  sqflite: ^2.3.3+1`r`n  timezone: ^0.9.4`r`n"
+    $pubspecContent = $pubspecContent -replace "(dependencies:\s*\r?\n)", "`${1}$toInsert"
+    [System.IO.File]::WriteAllText($pubspecPath, $pubspecContent, [System.Text.Encoding]::UTF8)
+    Write-Host "      Paquetes de notificacion agregados a pubspec.yaml"
+}
+
+# Borrar APK anterior para detectar si el nuevo build falla
+$flutterApk = "build\flutter\build\app\outputs\apk\release\app-release.apk"
+Remove-Item $flutterApk -ErrorAction SilentlyContinue
+
+# Resolver dependencias y compilar APK con el codigo completo
+Push-Location "build\flutter"
+$pubGetOut  = flutter pub get 2>&1
+$buildOut   = flutter build apk --release 2>&1
+Pop-Location
+
+if (-not (Test-Path $flutterApk)) {
+    Write-Host ""
+    Write-Error "Fallo la compilacion Flutter con notificaciones."
+    Write-Host "--- flutter pub get output ---" -ForegroundColor Red
+    $pubGetOut | Write-Host
+    Write-Host "--- flutter build apk output ---" -ForegroundColor Red
+    $buildOut  | Write-Host
+    exit 1
+}
+Copy-Item $flutterApk $APK -Force
 $sizeMB = [math]::Round((Get-Item $APK).Length / 1MB, 1)
-Write-Host "      OK - $sizeMB MB"
+Write-Host "      OK - $sizeMB MB (con notificaciones push)"
 
 # -- 3. Commit y tag en git ---------------------------------------------------
 Write-Host ""

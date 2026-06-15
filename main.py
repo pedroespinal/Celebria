@@ -22,7 +22,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.5.2"
+APP_VERSION = "1.5.3"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -153,8 +153,9 @@ T = {
         "one_day":        "1 día antes",
         "three_days":     "3 días antes",
         "one_week":       "1 semana antes",
-        "set_notif_hour": "Hora del recordatorio",
-        "alarm_saved":    "Hora guardada",
+        "set_notif_hour":   "Hora del recordatorio",
+        "set_notif_minute": "Minutos del recordatorio",
+        "alarm_saved":      "Hora guardada",
         "manual_btn":     "Manual de Usuario",
         "back_settings":  "Volver a Configuración",
         "set_popup":      "Popup de cumpleaños",
@@ -274,8 +275,9 @@ T = {
         "one_day":        "1 day before",
         "three_days":     "3 days before",
         "one_week":       "1 week before",
-        "set_notif_hour": "Daily reminder time",
-        "alarm_saved":    "Time saved",
+        "set_notif_hour":   "Daily reminder time",
+        "set_notif_minute": "Reminder minutes",
+        "alarm_saved":      "Time saved",
         "manual_btn":     "User Manual",
         "back_settings":  "Back to Settings",
         "set_popup":      "Birthday popup",
@@ -646,8 +648,10 @@ _HELP_ES = [
      "Ve a Configuración:\n\n"
      "Días de anticipación — elige cuándo quieres el aviso:\n"
      "  Hoy • 1 día antes • 3 días antes • 1 semana antes\n\n"
-     "Hora del recordatorio — la hora preferida para el aviso diario:\n"
-     "  6:00 · 7:00 · 8:00 · 9:00 · 10:00 · 12:00\n\n"
+     "Hora del recordatorio — elige la hora (00–23).\n\n"
+     "Minutos del recordatorio — afina el minuto exacto:\n"
+     "  :00 · :05 · :10 · :15 · :20 · :25\n"
+     "  :30 · :35 · :40 · :45 · :50 · :55\n\n"
      "\U0001f382 Popup de cumpleaños — activa o desactiva el aviso visual\n"
      "al abrir la app el día del cumpleaños:\n"
      "  \U0001f382 Mostrar  ·  \U0001f6ab Ocultar"),
@@ -800,8 +804,10 @@ _HELP_EN = [
      "Go to Settings:\n\n"
      "Advance days — choose when to be notified:\n"
      "  Same day • 1 day before • 3 days before • 1 week before\n\n"
-     "Reminder time — your preferred daily reminder hour:\n"
-     "  6:00 · 7:00 · 8:00 · 9:00 · 10:00 · 12:00\n\n"
+     "Reminder time — choose the hour (00–23).\n\n"
+     "Reminder minutes — fine-tune the exact minute:\n"
+     "  :00 · :05 · :10 · :15 · :20 · :25\n"
+     "  :30 · :35 · :40 · :45 · :50 · :55\n\n"
      "\U0001f382 Birthday popup — enable or disable the visual alert\n"
      "shown when you open the app on someone's birthday:\n"
      "  \U0001f382 Show  ·  \U0001f6ab Hide"),
@@ -2330,6 +2336,7 @@ def main(page: ft.Page):
 
         cur_nd = int(db.get("notif_days", "0"))
         cur_hr = int(db.get("notif_hour", "8"))
+        cur_mn = int(db.get("notif_minute", "0"))
 
         def set_theme(tid, e):
             THEME[0] = tid
@@ -2349,7 +2356,14 @@ def main(page: ft.Page):
 
         def set_hr(hr, e):
             db.set("notif_hour", hr)
-            _toast(f"{t('alarm_saved')}  {hr}:00")
+            mn = int(db.get("notif_minute", "0"))
+            _toast(f"{t('alarm_saved')}  {hr}:{mn:02d}")
+            render()
+
+        def set_mn(mn, e):
+            db.set("notif_minute", mn)
+            hr = int(db.get("notif_hour", "8"))
+            _toast(f"{t('alarm_saved')}  {hr}:{mn:02d}")
             render()
 
         def _toggle_setting(key):
@@ -2460,9 +2474,27 @@ def main(page: ft.Page):
             # ── Notif hour ───────────────────────────────────────────────
             _sec(t("set_notif_hour")),
             ft.Row([
-                _opt_btn(f"{h}:00", cur_hr == h,
+                _opt_btn(f"{h:02d}", cur_hr == h,
                          lambda e, h=h: set_hr(h, e))
-                for h in [6, 7, 8, 9, 10, 12]
+                for h in range(0, 12)
+            ], spacing=4),
+            ft.Row([
+                _opt_btn(f"{h:02d}", cur_hr == h,
+                         lambda e, h=h: set_hr(h, e))
+                for h in range(12, 24)
+            ], spacing=4),
+
+            # ── Notif minute ─────────────────────────────────────────────
+            _sec(t("set_notif_minute")),
+            ft.Row([
+                _opt_btn(f":{m:02d}", cur_mn == m,
+                         lambda e, m=m: set_mn(m, e))
+                for m in [0, 5, 10, 15, 20, 25]
+            ], spacing=4),
+            ft.Row([
+                _opt_btn(f":{m:02d}", cur_mn == m,
+                         lambda e, m=m: set_mn(m, e))
+                for m in [30, 35, 40, 45, 50, 55]
             ], spacing=4),
 
             # ── Popup toggle ─────────────────────────────────────────────

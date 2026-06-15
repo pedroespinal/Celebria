@@ -22,7 +22,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.7.2"
+APP_VERSION = "1.7.3"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -2362,13 +2362,13 @@ def main(page: ft.Page):
             render()
 
         def set_hr(e):
-            hr = int(e.control.value)
+            hr = int(e.data)
             db.set("notif_hour", hr)
             mn = int(db.get("notif_minute", "0"))
             _toast(f"{t('alarm_saved')}  {hr}:{mn:02d}")
 
         def set_mn(e):
-            mn = int(e.control.value)
+            mn = int(e.data)
             db.set("notif_minute", mn)
             hr = int(db.get("notif_hour", "8"))
             _toast(f"{t('alarm_saved')}  {hr}:{mn:02d}")
@@ -2490,13 +2490,12 @@ def main(page: ft.Page):
                     options=[
                         ft.dropdown.Option(str(h), f"{h:02d}") for h in range(24)
                     ],
-                    on_change=set_hr,
+                    on_select=set_hr,
                     width=110,
                     bgcolor=C["bg2"],
                     border_color=C["border"],
                     focused_border_color=C["cyan"],
                     color=C["t1"],
-
                 ),
                 ft.Text(":", size=24, color=C["t2"], weight=ft.FontWeight.BOLD,
                         text_align=ft.TextAlign.CENTER),
@@ -2505,7 +2504,7 @@ def main(page: ft.Page):
                     options=[
                         ft.dropdown.Option(str(m), f":{m:02d}") for m in range(0, 60, 5)
                     ],
-                    on_change=set_mn,
+                    on_select=set_mn,
                     width=110,
                     bgcolor=C["bg2"],
                     border_color=C["border"],

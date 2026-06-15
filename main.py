@@ -22,7 +22,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.7.0"
+APP_VERSION = "1.7.1"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -51,26 +51,26 @@ def _verify_genesis() -> bool:
     data = f"{_GENESIS_COMMIT}|{_GENESIS_DATE}|{_GENESIS_AUTHOR}|{_GENESIS_APP}"
     return hashlib.sha256(data.encode("utf-8")).hexdigest() == _GENESIS_SEAL
 
-# ── Palette ───────────────────────────────────────────────────────────────────
+# ── Palette — Fiesta ──────────────────────────────────────────────────────────
 _DARK = {
-    "bg":        "#07071a", "bg2":       "#0c0c24", "bg3":       "#10102e",
-    "card":      "#0d0d26", "border":    "#1c1c40",
-    "cyan":      "#00e5ff", "cyandim":   "#003d54",
-    "purple":    "#7c3aed", "purpledim": "#2d1566", "violet": "#a78bfa",
-    "pink":      "#f72585", "pinkdim":   "#5c0d33",
-    "green":     "#00ff88", "greendim":  "#003320",
-    "yellow":    "#ffbe0b", "red":       "#ff3d3d",
-    "t1":        "#e8e8ff", "t2":        "#ffaa44", "t3":        "#888aaa",
+    "bg":        "#061418", "bg2":       "#0a1e22", "bg3":       "#0e262c",
+    "card":      "#081a1e", "border":    "#143440",
+    "cyan":      "#ff6b6b", "cyandim":   "#4a0a0a",
+    "purple":    "#ffd93d", "purpledim": "#3a2800", "violet":    "#ffa040",
+    "pink":      "#ff4e88", "pinkdim":   "#4a0a20",
+    "green":     "#6bcb77", "greendim":  "#083a10",
+    "yellow":    "#ffd93d", "red":       "#ff4444",
+    "t1":        "#ffe8d0", "t2":        "#ffc080", "t3":        "#9a7888",
 }
 _LIGHT = {
-    "bg":        "#f0f0ff", "bg2":       "#e4e4f8", "bg3":       "#d6d6ef",
-    "card":      "#e8e8fb", "border":    "#8888bb",
-    "cyan":      "#003d99", "cyandim":   "#b8d0ff",
-    "purple":    "#5500aa", "purpledim": "#ddd0ff", "violet": "#6d28d9",
-    "pink":      "#aa004d", "pinkdim":   "#ffd0e8",
-    "green":     "#005522", "greendim":  "#c0f0d8",
-    "yellow":    "#6b5000", "red":       "#aa0000",
-    "t1":        "#08080f", "t2":        "#1a1a3a", "t3":        "#3a3a5c",
+    "bg":        "#fff8f0", "bg2":       "#ffe8d0", "bg3":       "#ffd8b8",
+    "card":      "#fff2e0", "border":    "#e8a868",
+    "cyan":      "#c0382b", "cyandim":   "#ffded8",
+    "purple":    "#9a6800", "purpledim": "#fff0c0", "violet":    "#8a4a00",
+    "pink":      "#b00040", "pinkdim":   "#ffd0e0",
+    "green":     "#1a7830", "greendim":  "#c0f0c8",
+    "yellow":    "#7a5000", "red":       "#aa0000",
+    "t1":        "#1a0808", "t2":        "#5a2a00", "t3":        "#7a5a4a",
 }
 
 THEME: list = ["dark"]
@@ -1076,11 +1076,9 @@ def main(page: ft.Page):
         return ft.Text(text, size=12, color=C["cyan"], weight=ft.FontWeight.BOLD)
 
     def _footer():
-        # Neon orange — vivo en oscuro, ambar oscuro en claro
-        footer_color = "#ff8800" if THEME[0] == "dark" else "#cc5500"
         cr = f"{t('created_by')}: {APP_AUTHOR}   ·   {t('rights')}   ©{APP_YEAR}"
         return ft.Text(
-            cr, size=10, color=footer_color,
+            cr, size=10, color=C["violet"],
             text_align=ft.TextAlign.CENTER,
         )
 

@@ -22,7 +22,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.7.1"
+APP_VERSION = "1.7.2"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -2361,17 +2361,17 @@ def main(page: ft.Page):
             db.set("notif_days", nd)
             render()
 
-        def set_hr(hr, e):
+        def set_hr(e):
+            hr = int(e.control.value)
             db.set("notif_hour", hr)
             mn = int(db.get("notif_minute", "0"))
             _toast(f"{t('alarm_saved')}  {hr}:{mn:02d}")
-            render()
 
-        def set_mn(mn, e):
+        def set_mn(e):
+            mn = int(e.control.value)
             db.set("notif_minute", mn)
             hr = int(db.get("notif_hour", "8"))
             _toast(f"{t('alarm_saved')}  {hr}:{mn:02d}")
-            render()
 
         def set_also_day(val, e):
             db.set("notif_also_day_of", val)
@@ -2482,31 +2482,38 @@ def main(page: ft.Page):
                          lambda e: set_nd(7, e)),
             ], spacing=4),
 
-            # ── Notif hour ───────────────────────────────────────────────
+            # ── Notif hour + minute (dropdowns) ──────────────────────────
             _sec(t("set_notif_hour")),
             ft.Row([
-                _opt_btn(f"{h:02d}", cur_hr == h,
-                         lambda e, h=h: set_hr(h, e))
-                for h in range(0, 12)
-            ], spacing=4),
-            ft.Row([
-                _opt_btn(f"{h:02d}", cur_hr == h,
-                         lambda e, h=h: set_hr(h, e))
-                for h in range(12, 24)
-            ], spacing=4),
+                ft.Dropdown(
+                    value=str(cur_hr),
+                    options=[
+                        ft.dropdown.Option(str(h), f"{h:02d}") for h in range(24)
+                    ],
+                    on_change=set_hr,
+                    width=110,
+                    bgcolor=C["bg2"],
+                    border_color=C["border"],
+                    focused_border_color=C["cyan"],
+                    color=C["t1"],
 
-            # ── Notif minute ─────────────────────────────────────────────
-            _sec(t("set_notif_minute")),
-            ft.Row([
-                _opt_btn(f":{m:02d}", cur_mn == m,
-                         lambda e, m=m: set_mn(m, e))
-                for m in [0, 5, 10, 15, 20, 25]
-            ], spacing=4),
-            ft.Row([
-                _opt_btn(f":{m:02d}", cur_mn == m,
-                         lambda e, m=m: set_mn(m, e))
-                for m in [30, 35, 40, 45, 50, 55]
-            ], spacing=4),
+                ),
+                ft.Text(":", size=24, color=C["t2"], weight=ft.FontWeight.BOLD,
+                        text_align=ft.TextAlign.CENTER),
+                ft.Dropdown(
+                    value=str(cur_mn),
+                    options=[
+                        ft.dropdown.Option(str(m), f":{m:02d}") for m in range(0, 60, 5)
+                    ],
+                    on_change=set_mn,
+                    width=110,
+                    bgcolor=C["bg2"],
+                    border_color=C["border"],
+                    focused_border_color=C["cyan"],
+                    color=C["t1"],
+
+                ),
+            ], spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER),
 
             # ── También el día del cumpleaños ────────────────────────────
             _sec(t("set_notif_also_day")),

@@ -22,7 +22,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.5.3"
+APP_VERSION = "1.5.4"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -2731,27 +2731,28 @@ def main(page: ft.Page):
         ))
 
         # Confeti animado: emojis aparecen uno a uno cada 220 ms
-        import threading as _thr
+        # IMPORTANTE: usar page.run_task + asyncio.sleep en vez de threading.Timer
+        # para no llamar page.update() desde un hilo de fondo (Flet 0.85.1 no es
+        # thread-safe: provoca race conditions con AlertDialogs abiertos encima).
+        import asyncio as _aio
         _CONFETTI = [
             "\U0001f389", "\U0001f38a", "\U0001f388", "\U0001f381", "✨",
             "\U0001f389", "\U0001f38a", "\U0001f388", "\U0001f381", "✨",
         ]
 
-        def _confetti_step(i=0):
-            if not _confetti_running[0] or i >= len(_CONFETTI):
-                return
-            _confetti_txt.value = "  ".join(_CONFETTI[:i + 1])
-            try:
-                page.update()
-            except Exception:
-                return
-            _nt = _thr.Timer(0.22, _confetti_step, [i + 1])
-            _nt.daemon = True
-            _nt.start()
+        async def _confetti_anim():
+            await _aio.sleep(0.5)
+            for _ci in range(len(_CONFETTI)):
+                if not _confetti_running[0]:
+                    break
+                _confetti_txt.value = "  ".join(_CONFETTI[:_ci + 1])
+                try:
+                    page.update()
+                except Exception:
+                    break
+                await _aio.sleep(0.22)
 
-        _ct = _thr.Timer(0.5, _confetti_step, [0])
-        _ct.daemon = True
-        _ct.start()
+        page.run_task(_confetti_anim)
 
         _play_birthday_sound()
 
@@ -2922,6 +2923,7 @@ def main(page: ft.Page):
     # ── Update checker — corre en segundo plano, no bloquea la UI ─────────
     def _check_for_update():
         import threading, urllib.request, json as _json
+        _update_shown = [False]  # muestra el diálogo solo una vez por sesión
 
         def _ver_tuple(v):
             try:
@@ -2963,9 +2965,12 @@ def main(page: ft.Page):
 
             actions = []
             if not forced:
+                def _snooze(e, nv=new_ver):
+                    db.set("snoozed_update_ver", nv)
+                    _close_dlg()
                 actions.append(ft.TextButton(
                     btn_later,
-                    on_click=lambda e: _close_dlg(),
+                    on_click=_snooze,
                     style=ft.ButtonStyle(color=C["t3"]),
                 ))
             # Abre la página de releases (no la URL directa del APK).
@@ -3014,10 +3019,17 @@ def main(page: ft.Page):
                 cur = _ver_tuple(APP_VERSION)
                 if _ver_tuple(latest) > cur:
                     forced = _ver_tuple(minimum) > cur
+                    # Saltar si el usuario ya dijo "Ahora no" para esta versión
+                    # (solo aplica a actualizaciones no forzadas)
+                    if not forced and db.get("snoozed_update_ver", "") == latest:
+                        return
                     # Despachar al event loop de Flet (no llamar desde hilo de fondo
                     # directamente — causa que el diálogo aparezca tarde o en la
                     # siguiente pantalla en vez de en Home).
                     async def _show_on_main(lv=latest, du=dl_url, fv=forced):
+                        if _update_shown[0] and not fv:
+                            return
+                        _update_shown[0] = True
                         _show_update_dialog(lv, du, forced=fv)
                     page.run_task(_show_on_main)
             except Exception:

@@ -103,7 +103,10 @@ $env:PYTHONUTF8 = "1"
 $env:NO_COLOR = "1"
 chcp 65001 | Out-Null
 flet build apk --artifact "Celebria-$Version" 2>&1 | Out-Null
-if (-not (Test-Path $APK)) { Write-Error "Fallo el bundle Python (flet build apk) - APK no encontrado."; exit 1 }
+# Flet puede fallar en su propio 'flutter build apk' (ej: falta desugaring) pero el
+# bundle Python si se crea antes. Solo abortamos si ese bundle no existe.
+$pythonBundle = "build\flutter\app\app.zip"
+if (-not (Test-Path $pythonBundle)) { Write-Error "Fallo el bundle Python (flet build apk) - app.zip no encontrado."; exit 1 }
 Write-Host "      OK - bundle Python listo"
 
 # -- 2.5. Recompilar Flutter con codigo de notificaciones push ----------------
@@ -117,6 +120,8 @@ Copy-Item "flutter\lib\main.dart"               "build\flutter\lib\main.dart"   
 Copy-Item "flutter\lib\notification_helper.dart" "build\flutter\lib\notification_helper.dart" -Force
 Copy-Item "flutter\android\AndroidManifest.xml"  `
     "build\flutter\android\app\src\main\AndroidManifest.xml" -Force -ErrorAction SilentlyContinue
+Copy-Item "flutter\android\app\build.gradle.kts" `
+    "build\flutter\android\app\build.gradle.kts" -Force
 
 # Asegurar que los paquetes de notificaciones esten en pubspec.yaml
 # (Flet los borra al regenerar el template)
@@ -134,11 +139,16 @@ $flutterApk = "build\flutter\build\app\outputs\apk\release\app-release.apk"
 Remove-Item $flutterApk -ErrorAction SilentlyContinue
 
 # Resolver dependencias y compilar APK con el codigo completo
+# SERIOUS_PYTHON_SITE_PACKAGES es requerido por el plugin serious_python de Flutter
+$env:SERIOUS_PYTHON_SITE_PACKAGES = "$PWD\build\site-packages"
 Push-Location "build\flutter"
 $pubGetOut  = flutter pub get 2>&1
-$buildOut   = flutter build apk --release 2>&1
+$buildOut   = flutter build apk --release --no-version-check --suppress-analytics 2>&1
 Pop-Location
 
+# Buscar el APK en las dos ubicaciones posibles segun la version de Flutter
+$flutterApkAlt = "build\flutter\build\app\outputs\flutter-apk\app-release.apk"
+if (-not (Test-Path $flutterApk)) { $flutterApk = $flutterApkAlt }
 if (-not (Test-Path $flutterApk)) {
     Write-Host ""
     Write-Error "Fallo la compilacion Flutter con notificaciones."

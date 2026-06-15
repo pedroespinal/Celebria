@@ -10,6 +10,7 @@ param(
 )
 
 $ErrorActionPreference = "Continue"   # git warnings no deben abortar el script
+$env:PATH = "C:\Users\D0nGibaFok\flutter\3.41.7\bin;" + $env:PATH
 Set-Location "C:\Celebria"
 
 # -- 0. Leer credencial de GitHub ---------------------------------------------
@@ -134,9 +135,13 @@ if ($pubspecContent -notmatch "flutter_local_notifications") {
     Write-Host "      Paquetes de notificacion agregados a pubspec.yaml"
 }
 
-# Borrar APK anterior para detectar si el nuevo build falla
-$flutterApk = "build\flutter\build\app\outputs\apk\release\app-release.apk"
-Remove-Item $flutterApk -ErrorAction SilentlyContinue
+# Borrar AMBAS ubicaciones posibles del APK antes de compilar.
+# Si no se borran, un build fallido reutiliza el APK viejo silenciosamente
+# y se sube una version anterior disfrazada con el numero nuevo.
+$flutterApk    = "build\flutter\build\app\outputs\apk\release\app-release.apk"
+$flutterApkAlt = "build\flutter\build\app\outputs\flutter-apk\app-release.apk"
+Remove-Item $flutterApk    -ErrorAction SilentlyContinue
+Remove-Item $flutterApkAlt -ErrorAction SilentlyContinue
 
 # Resolver dependencias y compilar APK con el codigo completo
 # SERIOUS_PYTHON_SITE_PACKAGES es requerido por el plugin serious_python de Flutter
@@ -146,10 +151,10 @@ $pubGetOut  = flutter pub get 2>&1
 $buildOut   = flutter build apk --release --no-version-check --suppress-analytics 2>&1
 Pop-Location
 
-# Buscar el APK en las dos ubicaciones posibles segun la version de Flutter
-$flutterApkAlt = "build\flutter\build\app\outputs\flutter-apk\app-release.apk"
-if (-not (Test-Path $flutterApk)) { $flutterApk = $flutterApkAlt }
-if (-not (Test-Path $flutterApk)) {
+# Buscar el APK recien compilado
+if (Test-Path $flutterApk)    { <# ruta primaria #> }
+elseif (Test-Path $flutterApkAlt) { $flutterApk = $flutterApkAlt }
+else {
     Write-Host ""
     Write-Error "Fallo la compilacion Flutter con notificaciones."
     Write-Host "--- flutter pub get output ---" -ForegroundColor Red

@@ -101,6 +101,8 @@ class NotificationHelper {
           int.tryParse(await _getSetting(db, 'notif_days', '0')) ?? 0;
       final notifHour =
           int.tryParse(await _getSetting(db, 'notif_hour', '8')) ?? 8;
+      final notifMinute =
+          int.tryParse(await _getSetting(db, 'notif_minute', '0')) ?? 0;
 
       final contacts = await db.query(
         'contacts',
@@ -124,7 +126,7 @@ class NotificationHelper {
 
         // Notification fires `notifDays` days BEFORE the birthday
         final notifDt =
-            _nextNotifDateTime(day, month, notifDays, notifHour, now);
+            _nextNotifDateTime(day, month, notifDays, notifHour, notifMinute, now);
         if (notifDt == null) continue;
 
         // Age the person will turn on their birthday
@@ -165,6 +167,8 @@ class NotificationHelper {
           // inexactAllowWhileIdle: fires within ~1 hour even in Doze mode.
           // Does not require SCHEDULE_EXACT_ALARM permission.
           androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+          uiLocalNotificationDateInterpretation:
+              UILocalNotificationDateInterpretation.absoluteTime,
         );
         scheduled++;
       }
@@ -206,7 +210,7 @@ class NotificationHelper {
   // Returns the next DateTime when the notification should fire, or null if
   // there is no upcoming occurrence within the next 2 years.
   static DateTime? _nextNotifDateTime(
-      int day, int month, int notifDays, int hour, DateTime now) {
+      int day, int month, int notifDays, int hour, int minute, DateTime now) {
     for (int offset = 0; offset <= 1; offset++) {
       try {
         final birthday = DateTime(now.year + offset, month, day);
@@ -216,7 +220,7 @@ class NotificationHelper {
           notifDay.month,
           notifDay.day,
           hour,
-          0,
+          minute,
           0,
         );
         // Must be strictly in the future (> 1 min from now)

@@ -22,7 +22,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.5.4"
+APP_VERSION = "1.6.0"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -207,6 +207,10 @@ T = {
         "remind_all_day_on":   "Sí, todo el día",
         "remind_all_day_off":  "Solo una vez por día",
         "birthday_screen_sub": "Hoy es un día especial",
+        "set_notif_also_day":  "Avisar también el mismo día",
+        "notif_also_day_on":   "✅  Sí, ese día también",
+        "notif_also_day_off":  "Solo el aviso anticipado",
+        "whatsapp_wish":       "Felicitar por WhatsApp",
     },
     "en": {
         "app_sub":        "Birthday Reminder",
@@ -329,6 +333,10 @@ T = {
         "remind_all_day_on":   "Yes, all day",
         "remind_all_day_off":  "Only once a day",
         "birthday_screen_sub": "Today is a special day",
+        "set_notif_also_day":  "Also notify on birthday day",
+        "notif_also_day_on":   "✅  Yes, that day too",
+        "notif_also_day_off":  "Advance notice only",
+        "whatsapp_wish":       "Send WhatsApp greeting",
     },
 }
 
@@ -2334,9 +2342,10 @@ def main(page: ft.Page):
         page.appbar         = _appbar(t("settings_title"), actions=_std_actions())
         page.navigation_bar = _nav_bar("settings")
 
-        cur_nd = int(db.get("notif_days", "0"))
-        cur_hr = int(db.get("notif_hour", "8"))
-        cur_mn = int(db.get("notif_minute", "0"))
+        cur_nd  = int(db.get("notif_days",       "0"))
+        cur_hr  = int(db.get("notif_hour",        "8"))
+        cur_mn  = int(db.get("notif_minute",      "0"))
+        cur_aod = db.get("notif_also_day_of", "0") == "1"
 
         def set_theme(tid, e):
             THEME[0] = tid
@@ -2364,6 +2373,10 @@ def main(page: ft.Page):
             db.set("notif_minute", mn)
             hr = int(db.get("notif_hour", "8"))
             _toast(f"{t('alarm_saved')}  {hr}:{mn:02d}")
+            render()
+
+        def set_also_day(val, e):
+            db.set("notif_also_day_of", val)
             render()
 
         def _toggle_setting(key):
@@ -2496,6 +2509,15 @@ def main(page: ft.Page):
                          lambda e, m=m: set_mn(m, e))
                 for m in [30, 35, 40, 45, 50, 55]
             ], spacing=4),
+
+            # ── También el día del cumpleaños ────────────────────────────
+            _sec(t("set_notif_also_day")),
+            ft.Row([
+                _opt_btn(t("notif_also_day_on"),  cur_aod,
+                         lambda e: set_also_day("1", e)),
+                _opt_btn(t("notif_also_day_off"), not cur_aod,
+                         lambda e: set_also_day("0", e)),
+            ], spacing=10),
 
             # ── Popup toggle ─────────────────────────────────────────────
             _sec(t("set_popup")),
@@ -2639,9 +2661,10 @@ def main(page: ft.Page):
             navigate("home")
 
         # Construir tarjeta por cada cumpleañero
+        import urllib.parse as _uparse
         contact_cards = []
         for row in today_contacts:
-            _, name, day, month, year, *_ = row
+            _, name, day, month, year, phone, *_ = row
             age = calc_age(day, month, year)
             _age_this_year = (date.today().year - year) if year else None
             _milestone = (
@@ -2654,13 +2677,36 @@ def main(page: ft.Page):
                 line = f"{name}  \U0001f382"
             if _milestone:
                 line += f"\n✨ {t('milestone_popup')}"
+
+            card_items = [
+                ft.Text(
+                    line, size=16,
+                    color=C["yellow"] if _milestone else C["cyan"],
+                    weight=ft.FontWeight.W_600,
+                    text_align=ft.TextAlign.CENTER,
+                ),
+            ]
+            phone_clean = "".join(
+                c for c in (phone or "") if c.isdigit() or c == "+"
+            ).lstrip("+")
+            if phone_clean:
+                wa_msg = (f"¡Feliz cumpleaños {name}! \U0001f382\U0001f389"
+                          if LANG[0] == "es"
+                          else f"Happy birthday {name}! \U0001f382\U0001f389")
+                wa_url = (f"https://wa.me/{phone_clean}"
+                          f"?text={_uparse.quote(wa_msg)}")
+                card_items.append(ft.TextButton(
+                    f"\U0001f4ac  {t('whatsapp_wish')}",
+                    url=wa_url,
+                    style=ft.ButtonStyle(color=C["cyan"]),
+                ))
+
             contact_cards.append(
                 ft.Container(
-                    content=ft.Text(
-                        line, size=16,
-                        color=C["yellow"] if _milestone else C["cyan"],
-                        weight=ft.FontWeight.W_600,
-                        text_align=ft.TextAlign.CENTER,
+                    content=ft.Column(
+                        card_items,
+                        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                        spacing=4, tight=True,
                     ),
                     bgcolor=C["purpledim"] if _milestone else C["cyandim"],
                     border_radius=12,
@@ -2849,7 +2895,10 @@ def main(page: ft.Page):
     # Se registra DESPUÉS de render() para que Flutter esté listo.
     # Para el momento en que aparece la pantalla de cumpleaños (≥3.5 s),
     # el audio ya está completamente cargado → play() funciona sin race condition.
-    _bd_snd = FletAudio(src=_gen_birthday_wav(), volume=1.0) if _AUDIO_OK else None
+    # src="/birthday.wav" → Flet lo sirve desde assets/ via su servidor local.
+    # FletAudio(src=bytes) NO funciona en Android — Flet no puede serializar
+    # bytes crudos como URL; el archivo de asset es la forma confiable.
+    _bd_snd = FletAudio(src="/birthday.wav", volume=1.0) if _AUDIO_OK else None
 
     # ── Initial render ────────────────────────────────────────────────────
     render()

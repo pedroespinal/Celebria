@@ -22,7 +22,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.8.0"
+APP_VERSION = "1.8.1"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -693,20 +693,30 @@ _HELP_ES = [
      "  \U0001f465 Todos — el resto del año"),
     ("\U0001f514", "Notificaciones automáticas",
      "Celebria envía notificaciones automáticas incluso con la app cerrada.\n\n"
-     "Cada vez que abres la app, se programan los avisos para todos tus "
-     "contactos según la hora y días de anticipación que hayas configurado.\n\n"
-     "También aparece un popup dentro de la app el día del cumpleaños."),
+     "Al abrir la app, las notificaciones se programan 2 años por adelantado\n"
+     "para todos tus contactos — sin necesidad de abrir la app cada año.\n"
+     "Si reinicias el teléfono, se reprograman automáticamente al encender.\n\n"
+     "También aparece un popup dentro de la app el día del cumpleaños.\n\n"
+     "Nota: algunos fabricantes bloquean notificaciones por ahorro de batería.\n"
+     "Consulta 'Batería y notificaciones' en Configuración si no te llegan."),
     ("⚙", "Configurar notificaciones",
      "Ve a Configuración:\n\n"
      "Días de anticipación — elige cuándo quieres el aviso:\n"
      "  Hoy • 1 día antes • 3 días antes • 1 semana antes\n\n"
-     "Hora del recordatorio — elige la hora (00–23).\n\n"
-     "Minutos del recordatorio — afina el minuto exacto:\n"
-     "  :00 · :05 · :10 · :15 · :20 · :25\n"
-     "  :30 · :35 · :40 · :45 · :50 · :55\n\n"
-     "\U0001f382 Popup de cumpleaños — activa o desactiva el aviso visual\n"
-     "al abrir la app el día del cumpleaños:\n"
-     "  \U0001f382 Mostrar  ·  \U0001f6ab Ocultar"),
+     "Segundo recordatorio (opcional) — añade un segundo aviso con otro\n"
+     "número de días de anticipación. Elige 'Solo uno' para desactivarlo.\n\n"
+     "Hora del recordatorio — dos desplegables en una sola fila:\n"
+     "  • Hora: del 00 al 23\n"
+     "  • Minutos: :00 · :05 · :10 · :15 · :20 · :25\n"
+     "             :30 · :35 · :40 · :45 · :50 · :55\n"
+     "Al seleccionar aparece un aviso con la hora guardada.\n\n"
+     "\U0001f382 Aviso el día del cumpleaños — activa o desactiva una\n"
+     "notificación extra la mañana del cumpleaños.\n\n"
+     "\U0001f4cb Resumen mensual — el 1° de cada mes recibes una notificación\n"
+     "con la lista de cumpleaños de ese mes.\n\n"
+     "\U0001f50b Batería y notificaciones — guía para desactivar el ahorro de\n"
+     "batería agresivo de tu fabricante (Samsung, Xiaomi, Huawei, etc.)\n"
+     "que puede bloquear las notificaciones."),
     ("\U0001f4c5", "Calendario de cumpleaños",
      "Toca Calendario en la barra inferior.\n\n"
      "• Los días con cumpleaños aparecen resaltados en rosa con \U0001f382.\n"
@@ -805,13 +815,17 @@ _HELP_ES = [
      "• Distribución por tipo de relación (Familia, Amigos, Trabajo, Otro)\n"
      "• Gráfica de barras con la distribución de cumpleaños por mes\n"
      "• ✨ Cumpleaños especiales — contactos que cumplen 15, 18, 21, 25,\n"
-     "  30, 40, 50, 60, 70, 75, 80, 90 o 100 años este año\n\n"
+     "  30, 40, 50, 60, 70, 75, 80, 90 o 100 años este año\n"
+     "• ♈ Signos del zodiaco — distribución de tus contactos por signo\n"
+     "  con símbolo, nombre y barra de porcentaje\n\n"
      "El mes actual aparece resaltado en cian."),
     ("\U0001f4a1", "Consejos útiles",
      "• Agrega el año de nacimiento para ver la edad exacta que cumple cada persona.\n\n"
      "• El color del borde de cada tarjeta indica la urgencia:\n"
      "   Rosa neón = HOY  •  Amarillo = esta semana  •  Cian = próximos 30 días\n\n"
      "• ✨ Borde amarillo doble = cumpleaños redondo este año (15, 18, 21, 25, 30...)\n\n"
+     "• \U0001f5d3 El chip 'Este mes' en Inicio muestra cuántos cumplen en el mes actual.\n"
+     "  Tócalo para ir directo al Calendario del mes.\n\n"
      "• Toca un día rosado en el Calendario para ir directo al detalle del contacto.\n\n"
      "• Agrega notas como '¿Le gusta el chocolate?' para recordar qué regalarle.\n\n"
      "• Usa la categoría Trabajo para cumpleaños de colegas.\n\n"
@@ -849,20 +863,30 @@ _HELP_EN = [
      "  \U0001f465 All — the rest of the year"),
     ("\U0001f514", "Automatic notifications",
      "Celebria sends notifications automatically even when the app is closed.\n\n"
-     "Every time you open the app, reminders are scheduled for all your "
-     "contacts based on your configured hour and advance days.\n\n"
-     "A birthday popup also appears inside the app on the day itself."),
+     "When you open the app, notifications are scheduled 2 years in advance\n"
+     "for all your contacts — no need to open the app every year.\n"
+     "If you restart your phone, notifications are rescheduled automatically.\n\n"
+     "A birthday popup also appears inside the app on the day itself.\n\n"
+     "Note: some manufacturers block notifications via battery optimization.\n"
+     "See 'Battery & notifications' in Settings if alerts are not arriving."),
     ("⚙", "Configuring notifications",
      "Go to Settings:\n\n"
      "Advance days — choose when to be notified:\n"
      "  Same day • 1 day before • 3 days before • 1 week before\n\n"
-     "Reminder time — choose the hour (00–23).\n\n"
-     "Reminder minutes — fine-tune the exact minute:\n"
-     "  :00 · :05 · :10 · :15 · :20 · :25\n"
-     "  :30 · :35 · :40 · :45 · :50 · :55\n\n"
-     "\U0001f382 Birthday popup — enable or disable the visual alert\n"
-     "shown when you open the app on someone's birthday:\n"
-     "  \U0001f382 Show  ·  \U0001f6ab Hide"),
+     "Second reminder (optional) — add a second alert on a different number\n"
+     "of advance days. Choose 'Just one' to disable it.\n\n"
+     "Reminder time — two dropdowns in a single row:\n"
+     "  • Hour: 00 to 23\n"
+     "  • Minutes: :00 · :05 · :10 · :15 · :20 · :25\n"
+     "             :30 · :35 · :40 · :45 · :50 · :55\n"
+     "A confirmation toast appears showing the saved time.\n\n"
+     "\U0001f382 Birthday-day notification — enable or disable an extra\n"
+     "notification on the morning of the birthday itself.\n\n"
+     "\U0001f4cb Monthly summary — on the 1st of every month you receive a\n"
+     "notification listing that month's upcoming birthdays.\n\n"
+     "\U0001f50b Battery & notifications — step-by-step guide to disable\n"
+     "aggressive battery optimization from your manufacturer\n"
+     "(Samsung, Xiaomi, Huawei, etc.) that may block notifications."),
     ("\U0001f4c5", "Birthday calendar",
      "Tap Calendar in the bottom bar.\n\n"
      "• Days with birthdays are highlighted in pink with \U0001f382.\n"
@@ -959,13 +983,17 @@ _HELP_EN = [
      "• Breakdown by relationship type (Family, Friends, Work, Other)\n"
      "• Bar chart of birthday distribution across months\n"
      "• ✨ Milestone birthdays — contacts turning 15, 18, 21, 25, 30,\n"
-     "  40, 50, 60, 70, 75, 80, 90 or 100 this year\n\n"
+     "  40, 50, 60, 70, 75, 80, 90 or 100 this year\n"
+     "• ♈ Zodiac signs — distribution of your contacts by sign,\n"
+     "  with symbol, name, and percentage bar\n\n"
      "The current month is highlighted in cyan."),
     ("\U0001f4a1", "Useful tips",
      "• Add the birth year to see the exact age each person is turning.\n\n"
      "• The card border color shows urgency:\n"
      "   Neon pink = TODAY  •  Yellow = this week  •  Cyan = next 30 days\n\n"
      "• ✨ Double amber border = milestone birthday this year (15, 18, 21, 25, 30...)\n\n"
+     "• \U0001f5d3 The 'This month' chip on Home shows how many birthdays fall in the\n"
+     "  current month. Tap it to jump straight to the Calendar for that month.\n\n"
      "• Tap a pink day in the Calendar to jump straight to that contact's detail.\n\n"
      "• Add notes like 'Likes chocolate?' to remember gift ideas.\n\n"
      "• Use the Work category for colleagues to keep them separate from friends.\n\n"

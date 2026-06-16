@@ -22,7 +22,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.7.3"
+APP_VERSION = "1.8.0"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -211,6 +211,15 @@ T = {
         "notif_also_day_on":   "✅  Sí, ese día también",
         "notif_also_day_off":  "Solo el aviso anticipado",
         "whatsapp_wish":       "Felicitar por WhatsApp",
+        "set_notif_days_2":    "Segundo recordatorio",
+        "notif_days_2_off":    "Solo uno",
+        "monthly_summary":     "Resumen mensual (día 1 de cada mes)",
+        "monthly_summary_on":  "✅  Sí, resumen mensual",
+        "monthly_summary_off": "Sin resumen",
+        "battery_guide_btn":   "⚡ Guía de batería para notificaciones",
+        "battery_guide_title": "Activar notificaciones en segundo plano",
+        "this_month_badge":    "Este mes",
+        "zodiac_title":        "Por signo zodiacal",
     },
     "en": {
         "app_sub":        "Birthday Reminder",
@@ -337,6 +346,15 @@ T = {
         "notif_also_day_on":   "✅  Yes, that day too",
         "notif_also_day_off":  "Advance notice only",
         "whatsapp_wish":       "Send WhatsApp greeting",
+        "set_notif_days_2":    "Second reminder",
+        "notif_days_2_off":    "Just one",
+        "monthly_summary":     "Monthly digest (1st of each month)",
+        "monthly_summary_on":  "✅  Yes, monthly digest",
+        "monthly_summary_off": "No digest",
+        "battery_guide_btn":   "⚡ Battery guide for notifications",
+        "battery_guide_title": "Enable background notifications",
+        "this_month_badge":    "This month",
+        "zodiac_title":        "By zodiac sign",
     },
 }
 
@@ -369,6 +387,32 @@ def days_until(day, month):
             return (bd - today).days
         except Exception:
             return 999
+
+
+_ZODIAC = [
+    (( 3,21),( 4,19),"♈","Aries"),
+    (( 4,20),( 5,20),"♉","Tauro/Taurus"),
+    (( 5,21),( 6,20),"♊","Géminis/Gemini"),
+    (( 6,21),( 7,22),"♋","Cáncer/Cancer"),
+    (( 7,23),( 8,22),"♌","Leo"),
+    (( 8,23),( 9,22),"♍","Virgo"),
+    (( 9,23),(10,22),"♎","Libra"),
+    ((10,23),(11,21),"♏","Escorpio/Scorpio"),
+    ((11,22),(12,21),"♐","Sagitario/Sagittarius"),
+    ((12,22),( 1,19),"♑","Capricornio/Capricorn"),
+    (( 1,20),( 2,18),"♒","Acuario/Aquarius"),
+    (( 2,19),( 3,20),"♓","Piscis/Pisces"),
+]
+
+def zodiac_sign(day, month):
+    for (sm, sd), (em, ed), sym, name in _ZODIAC:
+        if sm <= em:
+            if (month == sm and day >= sd) or (month == em and day <= ed) or (sm < month < em):
+                return sym, name
+        else:
+            if (month == sm and day >= sd) or (month == em and day <= ed) or month > sm or month < em:
+                return sym, name
+    return "♓", "Piscis/Pisces"
 
 
 def calc_age(day, month, year):
@@ -1406,10 +1450,36 @@ def main(page: ft.Page):
             padding=ft.Padding(left=12, top=4, right=12, bottom=8),
         )
 
+        # "Este mes" badge — muestra cuántos cumpleaños hay en el mes actual
+        _today = date.today()
+        _month_bdays = [r for r in db.all_contacts() if r[3] == _today.month]
+        _month_name_str = month_name(_today.month)
+        _month_banner = ft.Container(
+            content=ft.Row([
+                ft.Text("🗓", size=14),
+                ft.Text(
+                    f"{_month_name_str}: {len(_month_bdays)} "
+                    + (t("stats_today").lower() if len(_month_bdays) == 1 else t("stats_week").lower().replace("esta semana","cumpleaños").replace("this week","birthdays")),
+                    size=12, color=C["bg"],
+                    weight=ft.FontWeight.W_600,
+                ),
+            ], spacing=6, tight=True),
+            bgcolor=C["cyan"],
+            border_radius=20,
+            padding=ft.Padding(left=12, top=5, right=14, bottom=5),
+            visible=len(_month_bdays) > 0,
+            on_click=lambda e: navigate("calendar"),
+            ink=True,
+        )
+
         page.add(ft.Column(
             controls=[
                 ft.Container(
-                    content=ft.Column([search_tf, filter_btns], spacing=4),
+                    content=ft.Column([
+                        _month_banner,
+                        search_tf,
+                        filter_btns,
+                    ], spacing=4),
                     padding=ft.Padding(left=12, top=8, right=12, bottom=4),
                 ),
                 lv,
@@ -2196,11 +2266,55 @@ def main(page: ft.Page):
             *milestone_items,
         ], spacing=8), padding=ft.Padding(left=12, top=10, right=12, bottom=10))
 
+        # ── Distribución por signo zodiacal ──────────────────────────────
+        from collections import Counter as _Counter
+        zodiac_count = _Counter()
+        for r in rows:
+            if r[2] and r[3]:
+                sym, _ = zodiac_sign(r[2], r[3])
+                zodiac_count[sym] += 1
+
+        _ZODIAC_ORDER = ["♈","♉","♊","♋","♌","♍","♎","♏","♐","♑","♒","♓"]
+        _ZODIAC_NAMES_ES = {"♈":"Aries","♉":"Tauro","♊":"Géminis","♋":"Cáncer",
+                            "♌":"Leo","♍":"Virgo","♎":"Libra","♏":"Escorpio",
+                            "♐":"Sagitario","♑":"Capricornio","♒":"Acuario","♓":"Piscis"}
+        _ZODIAC_NAMES_EN = {"♈":"Aries","♉":"Taurus","♊":"Gemini","♋":"Cancer",
+                            "♌":"Leo","♍":"Virgo","♎":"Libra","♏":"Scorpio",
+                            "♐":"Sagittarius","♑":"Capricorn","♒":"Aquarius","♓":"Pisces"}
+        _znames = _ZODIAC_NAMES_ES if LANG[0] == "es" else _ZODIAC_NAMES_EN
+        _zmax = max(zodiac_count.values(), default=1)
+        zodiac_rows = []
+        for sym in _ZODIAC_ORDER:
+            cnt = zodiac_count.get(sym, 0)
+            if cnt == 0:
+                continue
+            zodiac_rows.append(ft.Row([
+                ft.Text(sym, size=16, width=24, text_align=ft.TextAlign.CENTER),
+                ft.Text(_znames[sym], size=11, color=C["t2"], width=80),
+                ft.ProgressBar(
+                    value=cnt / max(_zmax, 1), expand=True,
+                    bar_height=10, border_radius=5,
+                    color=C["violet"], bgcolor=C["bg3"],
+                ),
+                ft.Text(str(cnt), size=11, color=C["t1"],
+                        weight=ft.FontWeight.BOLD, width=24,
+                        text_align=ft.TextAlign.RIGHT),
+            ], spacing=6, vertical_alignment=ft.CrossAxisAlignment.CENTER))
+
+        zodiac_card = _card(ft.Column([
+            ft.Text(t("zodiac_title"), size=11, color=C["t2"],
+                    weight=ft.FontWeight.W_600),
+            ft.Divider(height=6, color="transparent"),
+            *(zodiac_rows if zodiac_rows else
+              [ft.Text(t("stats_none"), size=11, color=C["t3"])]),
+        ], spacing=8), padding=ft.Padding(left=12, top=10, right=12, bottom=10))
+
         items = [
             summary_row1, summary_row2,
             next_card,
             rel_card,
             month_card,
+            zodiac_card,
             milestone_card,
             _footer(),
             ft.Container(height=16),
@@ -2340,10 +2454,12 @@ def main(page: ft.Page):
         page.appbar         = _appbar(t("settings_title"), actions=_std_actions())
         page.navigation_bar = _nav_bar("settings")
 
-        cur_nd  = int(db.get("notif_days",       "0"))
-        cur_hr  = int(db.get("notif_hour",        "8"))
-        cur_mn  = int(db.get("notif_minute",      "0"))
-        cur_aod = db.get("notif_also_day_of", "0") == "1"
+        cur_nd   = int(db.get("notif_days",           "0"))
+        cur_nd2  = int(db.get("notif_days_2",         "0"))
+        cur_hr   = int(db.get("notif_hour",            "8"))
+        cur_mn   = int(db.get("notif_minute",          "0"))
+        cur_aod  = db.get("notif_also_day_of",    "0") == "1"
+        cur_sum  = db.get("notif_monthly_summary", "1") == "1"
 
         def set_theme(tid, e):
             THEME[0] = tid
@@ -2376,6 +2492,57 @@ def main(page: ft.Page):
         def set_also_day(val, e):
             db.set("notif_also_day_of", val)
             render()
+
+        def set_nd2(nd, e):
+            db.set("notif_days_2", nd)
+            render()
+
+        def set_monthly_summary(val, e):
+            db.set("notif_monthly_summary", val)
+            render()
+
+        def _show_battery_guide(e):
+            content_es = (
+                "Las notificaciones de Celebria pueden ser bloqueadas por el "
+                "sistema de ahorro de batería del fabricante. Sigue los pasos "
+                "para tu marca:\n\n"
+                "📱 Samsung\nAjustes → Batería → Optimización de batería → "
+                "Todas las apps → Celebria → No restringir\n\n"
+                "📱 Xiaomi / MIUI\nAjustes → Apps → Administrar apps → Celebria "
+                "→ Ahorro de batería → Sin restricciones\n\n"
+                "📱 Huawei\nAjustes → Batería → Inicio de apps → Celebria → "
+                "Gestión manual → activa los 3 toggles\n\n"
+                "📱 OPPO / ColorOS\nAjustes → Batería → Gestión de energía → "
+                "Celebria → No restringir\n\n"
+                "📱 Otros\nAjustes → Apps → Celebria → Batería → Sin restricciones"
+            )
+            content_en = (
+                "Celebria notifications can be blocked by manufacturer battery "
+                "optimization. Follow the steps for your brand:\n\n"
+                "📱 Samsung\nSettings → Battery → Battery optimization → "
+                "All apps → Celebria → Don't optimize\n\n"
+                "📱 Xiaomi / MIUI\nSettings → Apps → Manage apps → Celebria "
+                "→ Battery saver → No restrictions\n\n"
+                "📱 Huawei\nSettings → Battery → App launch → Celebria → "
+                "Manual → enable all 3 toggles\n\n"
+                "📱 OPPO / ColorOS\nSettings → Battery → Power management → "
+                "Celebria → No restriction\n\n"
+                "📱 Others\nSettings → Apps → Celebria → Battery → Unrestricted"
+            )
+            body = content_es if LANG[0] == "es" else content_en
+            dlg = ft.AlertDialog(
+                title=ft.Text(t("battery_guide_title"), color=C["cyan"],
+                              weight=ft.FontWeight.BOLD),
+                content=ft.Container(
+                    content=ft.Text(body, size=12, color=C["t1"]),
+                    width=320,
+                ),
+                actions=[ft.TextButton("OK", on_click=lambda e: (
+                    setattr(dlg, "open", False), page.update()
+                ))],
+                bgcolor=C["bg2"],
+            )
+            page.show_dialog(dlg)
 
         def _toggle_setting(key):
             new_val = "0" if db.get(key, "1") == "1" else "1"
@@ -2522,6 +2689,38 @@ def main(page: ft.Page):
                 _opt_btn(t("notif_also_day_off"), not cur_aod,
                          lambda e: set_also_day("0", e)),
             ], spacing=10),
+
+            # ── Segundo recordatorio ──────────────────────────────────────
+            _sec(t("set_notif_days_2")),
+            ft.Row([
+                _opt_btn(t("notif_days_2_off"), cur_nd2 == 0,
+                         lambda e: set_nd2(0, e)),
+                _opt_btn(t("one_day"),          cur_nd2 == 1,
+                         lambda e: set_nd2(1, e)),
+                _opt_btn(t("three_days"),       cur_nd2 == 3,
+                         lambda e: set_nd2(3, e)),
+                _opt_btn(t("one_week"),         cur_nd2 == 7,
+                         lambda e: set_nd2(7, e)),
+            ], spacing=4),
+
+            # ── Resumen mensual ───────────────────────────────────────────
+            _sec(t("monthly_summary")),
+            ft.Row([
+                _opt_btn(t("monthly_summary_on"),  cur_sum,
+                         lambda e: set_monthly_summary("1", e)),
+                _opt_btn(t("monthly_summary_off"), not cur_sum,
+                         lambda e: set_monthly_summary("0", e)),
+            ], spacing=10),
+
+            # ── Guía de batería ───────────────────────────────────────────
+            ft.Container(
+                content=ft.TextButton(
+                    t("battery_guide_btn"),
+                    on_click=_show_battery_guide,
+                    style=ft.ButtonStyle(color=C["yellow"]),
+                ),
+                padding=ft.Padding(left=0, top=4, right=0, bottom=0),
+            ),
 
             # ── Popup toggle ─────────────────────────────────────────────
             _sec(t("set_popup")),

@@ -57,6 +57,10 @@ Map<String, String> environmentVariables = Map.from(Platform.environment);
 
 const MethodChannel _bootChannel = MethodChannel('com.flet.celebria/boot');
 
+// Keeps the AppLifecycleListener alive for the whole process lifetime —
+// a local variable would get garbage-collected and silently stop firing.
+AppLifecycleListener? _lifecycleListener;
+
 // Entry point called by BootReceiver on device restart to reschedule
 // notifications without opening the full app UI.
 @pragma('vm:entry-point')
@@ -77,9 +81,23 @@ void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Schedule birthday notifications from the persisted DB before Python starts.
-  // Runs every time the app opens so schedules stay fresh after settings changes.
   if (defaultTargetPlatform == TargetPlatform.android) {
     await NotificationHelper.initialize();
+
+    // IMPORTANT: the line above only runs once, at cold start of this Dart
+    // engine/process. Python and Dart share the same SQLite file but there is
+    // no channel for Python to tell Dart "a contact/setting changed, please
+    // reschedule" — so without this listener, any contact added/edited or
+    // notification setting changed while the app keeps running (i.e. the
+    // process is never fully killed) would NEVER get scheduled, since
+    // scheduleFromDB() would never run again. Recomputing on every resume
+    // (leaving and coming back to the app, or even just turning the screen
+    // off and on) keeps the schedule in sync with whatever Python last wrote.
+    _lifecycleListener = AppLifecycleListener(
+      onResume: () {
+        NotificationHelper.scheduleFromDB();
+      },
+    );
   }
 
   FletDeepLinkingBootstrap.install();

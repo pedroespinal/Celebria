@@ -22,7 +22,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.8.2"
+APP_VERSION = "1.8.3"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -2960,56 +2960,63 @@ def main(page: ft.Page):
             "", size=24, text_align=ft.TextAlign.CENTER,
         )
 
-        page.add(ft.Column(
-            controls=[
-                ft.Container(
-                    content=ft.Column(
-                        controls=[
-                            ft.Text(
-                                "\U0001f388 \U0001f38a \U0001f389 \U0001f381 \U0001f389 \U0001f38a \U0001f388",
-                                size=22, text_align=ft.TextAlign.CENTER,
-                            ),
-                            ft.Text("\U0001f382", size=88,
-                                    text_align=ft.TextAlign.CENTER),
-                            ft.Text(
-                                t("popup_title"),
-                                size=26, color=C["pink"],
-                                weight=ft.FontWeight.BOLD,
-                                text_align=ft.TextAlign.CENTER,
-                            ),
-                            ft.Text(
-                                t("birthday_screen_sub"),
-                                size=13, color=C["t2"],
-                                text_align=ft.TextAlign.CENTER,
-                            ),
-                            _confetti_txt,
-                            ft.Container(height=2, bgcolor=C["pink"],
-                                         border_radius=1),
-                            *contact_cards,
-                            ft.Text(
-                                "✨ \U0001f38a \U0001f389 \U0001f38a ✨",
-                                size=18, text_align=ft.TextAlign.CENTER,
-                            ),
-                        ],
-                        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                        spacing=12,
-                        scroll=ft.ScrollMode.AUTO,
+        # SafeArea: esta pantalla no tiene appbar ni navigation_bar (inmersiva),
+        # asi que sin esto el boton "Celebrar!" queda oculto/cortado detras de
+        # la barra de gestos/navegacion del sistema en Android edge-to-edge
+        # (obligatorio desde targetSdk 35 / Android 15).
+        page.add(ft.SafeArea(
+            content=ft.Column(
+                controls=[
+                    ft.Container(
+                        content=ft.Column(
+                            controls=[
+                                ft.Text(
+                                    "\U0001f388 \U0001f38a \U0001f389 \U0001f381 \U0001f389 \U0001f38a \U0001f388",
+                                    size=22, text_align=ft.TextAlign.CENTER,
+                                ),
+                                ft.Text("\U0001f382", size=88,
+                                        text_align=ft.TextAlign.CENTER),
+                                ft.Text(
+                                    t("popup_title"),
+                                    size=26, color=C["pink"],
+                                    weight=ft.FontWeight.BOLD,
+                                    text_align=ft.TextAlign.CENTER,
+                                ),
+                                ft.Text(
+                                    t("birthday_screen_sub"),
+                                    size=13, color=C["t2"],
+                                    text_align=ft.TextAlign.CENTER,
+                                ),
+                                _confetti_txt,
+                                ft.Container(height=2, bgcolor=C["pink"],
+                                             border_radius=1),
+                                *contact_cards,
+                                ft.Text(
+                                    "✨ \U0001f38a \U0001f389 \U0001f38a ✨",
+                                    size=18, text_align=ft.TextAlign.CENTER,
+                                ),
+                            ],
+                            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                            spacing=12,
+                            scroll=ft.ScrollMode.AUTO,
+                        ),
+                        padding=ft.Padding(left=20, top=36, right=20, bottom=20),
+                        expand=True,
                     ),
-                    padding=ft.Padding(left=20, top=36, right=20, bottom=20),
-                    expand=True,
-                ),
-                ft.Container(
-                    content=_btn(
-                        f"\U0001f389  {t('popup_close')}",
-                        C["pink"],
-                        on_click=_celebrate,
+                    ft.Container(
+                        content=_btn(
+                            f"\U0001f389  {t('popup_close')}",
+                            C["pink"],
+                            on_click=_celebrate,
+                            expand=False,
+                        ),
+                        alignment=ft.Alignment.CENTER,
+                        padding=ft.Padding(left=32, top=0, right=32, bottom=32),
                         expand=False,
                     ),
-                    alignment=ft.Alignment.CENTER,
-                    padding=ft.Padding(left=32, top=0, right=32, bottom=32),
-                    expand=False,
-                ),
-            ],
+                ],
+                expand=True,
+            ),
             expand=True,
         ))
 

@@ -47,6 +47,28 @@ $APK   = "C:\Celebria\build\apk\Celebria-$Version.apk"
 Write-Host ""
 Write-Host "=== Celebria Release $TAG ===" -ForegroundColor Cyan
 
+# -- REGLA: la version siempre debe incrementar respecto a la actual ----------
+function ConvertTo-VersionParts([string]$v) {
+    return ($v -split '\.') | ForEach-Object { [int]$_ }
+}
+$currentMatch = Select-String -Path "main.py" -Pattern 'APP_VERSION\s*=\s*"([^"]+)"' | Select-Object -First 1
+if (-not $currentMatch) { Write-Error "No se encontro APP_VERSION en main.py."; exit 1 }
+$currentVersion = $currentMatch.Matches[0].Groups[1].Value
+$curParts = ConvertTo-VersionParts $currentVersion
+$newParts = ConvertTo-VersionParts $Version
+$isNewer = $false
+for ($i = 0; $i -lt 3; $i++) {
+    $c = if ($i -lt $curParts.Length) { $curParts[$i] } else { 0 }
+    $n = if ($i -lt $newParts.Length) { $newParts[$i] } else { 0 }
+    if ($n -gt $c) { $isNewer = $true; break }
+    if ($n -lt $c) { break }
+}
+if (-not $isNewer) {
+    Write-Error "La version '$Version' no es mayor que la version actual ($currentVersion). Cada release debe incrementar la version (versionCode y APK)."
+    exit 1
+}
+Write-Host "      Version: $currentVersion -> $Version (OK, incrementa)" -ForegroundColor DarkGray
+
 # -- 0. Prueba local antes de compilar ----------------------------------------
 if (-not $SkipTest) {
     Write-Host ""
@@ -124,6 +146,22 @@ Copy-Item "flutter\android\AndroidManifest.xml"  `
 Copy-Item "flutter\android\app\build.gradle.kts" `
     "build\flutter\android\app\build.gradle.kts" -Force
 
+# Widget de pantalla de inicio — Kotlin + recursos Android
+$ktSrc = "flutter\android\app\src\main\kotlin\com\flet\celebria"
+$ktDst = "build\flutter\android\app\src\main\kotlin\com\flet\celebria"
+New-Item -ItemType Directory -Force $ktDst | Out-Null
+Copy-Item "$ktSrc\BirthdayWidget.kt" "$ktDst\BirthdayWidget.kt" -Force
+Copy-Item "$ktSrc\BootReceiver.kt"   "$ktDst\BootReceiver.kt"   -Force
+Copy-Item "$ktSrc\MainActivity.kt"   "$ktDst\MainActivity.kt"   -Force
+
+$resSrc = "flutter\android\res"
+$resDst = "build\flutter\android\app\src\main\res"
+New-Item -ItemType Directory -Force "$resDst\layout" | Out-Null
+New-Item -ItemType Directory -Force "$resDst\xml"    | Out-Null
+Copy-Item "$resSrc\layout\birthday_widget.xml"      "$resDst\layout\birthday_widget.xml"      -Force
+Copy-Item "$resSrc\xml\birthday_widget_info.xml"    "$resDst\xml\birthday_widget_info.xml"    -Force
+Write-Host "      Widget files copiados"
+
 # Asegurar que los paquetes de notificaciones esten en pubspec.yaml
 # (Flet los borra al regenerar el template)
 $pubspecPath = "$PWD\build\flutter\pubspec.yaml"
@@ -167,10 +205,17 @@ Copy-Item $flutterApk $APK -Force
 $sizeMB = [math]::Round((Get-Item $APK).Length / 1MB, 1)
 Write-Host "      OK - $sizeMB MB (con notificaciones push)"
 
+# REGLA: build\apk siempre debe contener solo el APK mas reciente (sin reguero
+# de versiones viejas). Borra cualquier Celebria-*.apk* que no sea el actual.
+Get-ChildItem "build\apk" -Filter "Celebria-*.apk*" -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -ne (Split-Path $APK -Leaf) } |
+    Remove-Item -Force
+Write-Host "      build\apk limpiado - solo queda Celebria-$Version.apk"
+
 # -- 3. Commit y tag en git ---------------------------------------------------
 Write-Host ""
 Write-Host "[3/6] Commit y tag git..."
-git add main.py version.json assets/icon.png *>&1 | Out-Null
+git add main.py version.json assets/icon.png flutter release.ps1 *>&1 | Out-Null
 git commit -m "Celebria $TAG - $Notes" *>&1 | Out-Null
 git tag $TAG *>&1 | Out-Null
 git push origin main --tags *>&1 | Out-Null

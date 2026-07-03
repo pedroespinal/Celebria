@@ -22,7 +22,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.8.1"
+APP_VERSION = "1.8.2"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -697,6 +697,9 @@ _HELP_ES = [
      "para todos tus contactos — sin necesidad de abrir la app cada año.\n"
      "Si reinicias el teléfono, se reprograman automáticamente al encender.\n\n"
      "También aparece un popup dentro de la app el día del cumpleaños.\n\n"
+     "Si las notificaciones están desactivadas (o falta el permiso de\n"
+     "'alarmas exactas' en Android 12+), Celebria te lo avisa con un aviso\n"
+     "nativo al abrir la app, con un botón para ir directo a Configuración.\n\n"
      "Nota: algunos fabricantes bloquean notificaciones por ahorro de batería.\n"
      "Consulta 'Batería y notificaciones' en Configuración si no te llegan."),
     ("⚙", "Configurar notificaciones",
@@ -867,6 +870,9 @@ _HELP_EN = [
      "for all your contacts — no need to open the app every year.\n"
      "If you restart your phone, notifications are rescheduled automatically.\n\n"
      "A birthday popup also appears inside the app on the day itself.\n\n"
+     "If notifications are disabled (or the 'exact alarms' permission is\n"
+     "missing on Android 12+), Celebria shows a native prompt when you open\n"
+     "the app, with a button that goes straight to Settings.\n\n"
      "Note: some manufacturers block notifications via battery optimization.\n"
      "See 'Battery & notifications' in Settings if alerts are not arriving."),
     ("⚙", "Configuring notifications",

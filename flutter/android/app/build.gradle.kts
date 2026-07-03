@@ -14,8 +14,17 @@ val localProperties = Properties().apply {
     }
 }
 
-val flutterVersionCode = localProperties.getProperty("flutter.versionCode")?.toIntOrNull() ?: 1
 val flutterVersionName = localProperties.getProperty("flutter.versionName") ?: "1.0"
+
+// Derive versionCode from versionName so Android always recognises a newer APK.
+// "1.5.4" → 10504  |  "1.10.0" → 11000  |  "2.0.0" → 20000
+val flutterVersionCode: Int = flutterVersionName.split(".")
+    .mapNotNull { it.toIntOrNull() }
+    .let { p ->
+        (p.getOrElse(0) { 0 }) * 10000 +
+        (p.getOrElse(1) { 0 }) * 100   +
+        (p.getOrElse(2) { 0 })
+    }.coerceAtLeast(1)
 
 android {
     namespace = "com.flet.celebria"

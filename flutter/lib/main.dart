@@ -55,6 +55,23 @@ String assetsDir = "";
 String appDir = "";
 Map<String, String> environmentVariables = Map.from(Platform.environment);
 
+const MethodChannel _bootChannel = MethodChannel('com.flet.celebria/boot');
+
+// Entry point called by BootReceiver on device restart to reschedule
+// notifications without opening the full app UI.
+@pragma('vm:entry-point')
+void backgroundMain() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  if (defaultTargetPlatform == TargetPlatform.android) {
+    await NotificationHelper.initialize();
+  }
+  // Tell BootReceiver we're done so it can release its wakelock and
+  // destroy the headless engine instead of waiting for its timeout.
+  try {
+    await _bootChannel.invokeMethod('bootRescheduleDone');
+  } catch (_) {}
+}
+
 void main(List<String> args) async {
   // Must be first — required before using any Flutter plugin.
   WidgetsFlutterBinding.ensureInitialized();

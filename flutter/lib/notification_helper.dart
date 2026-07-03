@@ -13,6 +13,7 @@ class NotificationHelper {
   static final FlutterLocalNotificationsPlugin _notif =
       FlutterLocalNotificationsPlugin();
   static bool _initialized = false;
+  static int _lastHandledTestTrigger = 0;
 
   // ── Public entry point called once at app start ─────────────────────────────
   static Future<void> initialize() async {
@@ -114,12 +115,25 @@ class NotificationHelper {
       final notifMinute  = int.tryParse(await _getSetting(db, 'notif_minute', '0')) ?? 0;
       final alsoOnDay    = (await _getSetting(db, 'notif_also_day_of', '0')) == '1';
       final summaryOn    = (await _getSetting(db, 'notif_monthly_summary', '1')) == '1';
+      final testTrigger  = int.tryParse(await _getSetting(db, 'notif_test_trigger', '0')) ?? 0;
 
       final contacts = await db.query(
         'contacts',
         columns: ['name', 'day', 'month', 'year'],
       );
       await db.close();
+
+      // "Send test notification" button in Settings — fires immediately so
+      // we can tell whether Android will display ANY notification for this
+      // app at all, independent of scheduling/timing. Deduped in-memory so
+      // it only fires once per button tap even if this runs again soon.
+      if (testTrigger > 0 && testTrigger != _lastHandledTestTrigger) {
+        final ageMs = DateTime.now().millisecondsSinceEpoch - testTrigger;
+        if (ageMs >= 0 && ageMs < 120000) {
+          _lastHandledTestTrigger = testTrigger;
+          await _fireTestNotification(lang);
+        }
+      }
 
       await _notif.cancelAll();
 
@@ -252,6 +266,31 @@ class NotificationHelper {
       debugPrint('[Celebria] scheduleFromDB error: $e');
     }
     return scheduled;
+  }
+
+  // ── Immediate test notification (Settings → "Send test push notification") ─
+  static Future<void> _fireTestNotification(String lang) async {
+    const details = NotificationDetails(
+      android: AndroidNotificationDetails(
+        'celebria_birthdays',
+        'Birthday Reminders',
+        channelDescription: 'Daily birthday reminders from Celebria',
+        importance: Importance.high,
+        priority: Priority.high,
+        icon: '@mipmap/ic_launcher',
+        enableVibration: true,
+      ),
+    );
+    final title = lang == 'es' ? '\U0001f514 Notificación de prueba' : '\U0001f514 Test notification';
+    final body  = lang == 'es'
+        ? 'Si ves esto, las notificaciones de Celebria funcionan correctamente.'
+        : 'If you see this, Celebria notifications are working correctly.';
+    try {
+      await _notif.show(9999, title, body, details);
+      debugPrint('[Celebria] Test notification fired.');
+    } catch (e) {
+      debugPrint('[Celebria] Test notification failed: $e');
+    }
   }
 
   // ── Schedule a single notification with exact alarm fallback ────────────────

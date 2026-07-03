@@ -22,7 +22,7 @@ from pathlib import Path
 
 # ── App constants ─────────────────────────────────────────────────────────────
 APP_NAME    = "Celebria"
-APP_VERSION = "1.8.3"
+APP_VERSION = "1.8.4"
 APP_AUTHOR  = "Pedro Espinal"
 APP_RIGHTS  = "Todos los derechos reservados"
 APP_YEAR    = str(date.today().year)
@@ -220,6 +220,8 @@ T = {
         "battery_guide_title": "Activar notificaciones en segundo plano",
         "this_month_badge":    "Este mes",
         "zodiac_title":        "Por signo zodiacal",
+        "test_push_btn":       "🔔  Enviar notificación de prueba",
+        "test_push_toast":     "Programada. Sal de la app y vuelve a entrar para recibirla (o espera ~1 min).",
     },
     "en": {
         "app_sub":        "Birthday Reminder",
@@ -355,6 +357,8 @@ T = {
         "battery_guide_title": "Enable background notifications",
         "this_month_badge":    "This month",
         "zodiac_title":        "By zodiac sign",
+        "test_push_btn":       "🔔  Send test push notification",
+        "test_push_toast":     "Scheduled. Leave the app and come back to receive it (or wait ~1 min).",
     },
 }
 
@@ -710,8 +714,7 @@ _HELP_ES = [
      "número de días de anticipación. Elige 'Solo uno' para desactivarlo.\n\n"
      "Hora del recordatorio — dos desplegables en una sola fila:\n"
      "  • Hora: del 00 al 23\n"
-     "  • Minutos: :00 · :05 · :10 · :15 · :20 · :25\n"
-     "             :30 · :35 · :40 · :45 · :50 · :55\n"
+     "  • Minutos: cualquier minuto, del :00 al :59\n"
      "Al seleccionar aparece un aviso con la hora guardada.\n\n"
      "\U0001f382 Aviso el día del cumpleaños — activa o desactiva una\n"
      "notificación extra la mañana del cumpleaños.\n\n"
@@ -883,8 +886,7 @@ _HELP_EN = [
      "of advance days. Choose 'Just one' to disable it.\n\n"
      "Reminder time — two dropdowns in a single row:\n"
      "  • Hour: 00 to 23\n"
-     "  • Minutes: :00 · :05 · :10 · :15 · :20 · :25\n"
-     "             :30 · :35 · :40 · :45 · :50 · :55\n"
+     "  • Minutes: any minute, :00 to :59\n"
      "A confirmation toast appears showing the saved time.\n\n"
      "\U0001f382 Birthday-day notification — enable or disable an extra\n"
      "notification on the morning of the birthday itself.\n\n"
@@ -2466,6 +2468,18 @@ def main(page: ft.Page):
         except Exception as ex:
             _toast(f"Error: {ex}")
 
+    # ── Test push notification (called from Settings button) ──────────────
+    # Python has no direct channel to the Dart/Android side, so this just
+    # drops a timestamp in the settings table. The Dart AppLifecycleListener
+    # (fires every time the user returns to the app) picks it up in
+    # scheduleFromDB() and fires an immediate ft.notif.show(), isolating
+    # "does Android display notifications for this app at all" from any
+    # scheduling/timing question.
+    def _do_test_push():
+        import time as _time
+        db.set("notif_test_trigger", str(int(_time.time() * 1000)))
+        _toast(t("test_push_toast"))
+
     # ── Test-popup helper (called from Settings button) ───────────────────
     def _do_test_popup():
         """Navega a la pantalla de cumpleaños inmediatamente (botón de prueba)."""
@@ -2703,7 +2717,7 @@ def main(page: ft.Page):
                 ft.Dropdown(
                     value=str(cur_mn),
                     options=[
-                        ft.dropdown.Option(str(m), f":{m:02d}") for m in range(0, 60, 5)
+                        ft.dropdown.Option(str(m), f":{m:02d}") for m in range(0, 60)
                     ],
                     on_select=set_mn,
                     width=110,
@@ -2787,6 +2801,13 @@ def main(page: ft.Page):
                 f"\U0001f388  {t('test_popup_btn')}",
                 C["pink"],
                 on_click=lambda e: _do_test_popup(),
+                expand=True,
+            ),
+            # ── Test push notification (real Android notification) ──────
+            _btn(
+                t("test_push_btn"),
+                C["cyan"],
+                on_click=lambda e: _do_test_push(),
                 expand=True,
             ),
             # ── Backup ───────────────────────────────────────────────────

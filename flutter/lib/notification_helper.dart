@@ -114,6 +114,11 @@ class NotificationHelper {
   // Monthly summary slots (IDs 2000–2023):
   //   • On the 1st of each month that has birthday contacts — for next 2 years
   //
+  // Same-day repeat slots (IDs 50000+, opt-in via remind_all_day):
+  //   • Extra reminders every `remind_all_day_interval` minutes throughout
+  //     the actual birthday day, starting after the day-of notice and
+  //     stopping at 23:59 that same day.
+  //
   // Uses exactAllowWhileIdle for reliability; falls back to inexact if the
   // SCHEDULE_EXACT_ALARM permission is not granted.
   static Future<int> scheduleFromDB() async {
@@ -135,6 +140,9 @@ class NotificationHelper {
       final notifMinute  = int.tryParse(await _getSetting(db, 'notif_minute', '0')) ?? 0;
       final alsoOnDay    = (await _getSetting(db, 'notif_also_day_of', '0')) == '1';
       final summaryOn    = (await _getSetting(db, 'notif_monthly_summary', '1')) == '1';
+      final remindAllDay = (await _getSetting(db, 'remind_all_day', '0')) == '1';
+      final remindInterval =
+          int.tryParse(await _getSetting(db, 'remind_all_day_interval', '120')) ?? 120;
 
       final contacts = await db.query(
         'contacts',
@@ -160,6 +168,10 @@ class NotificationHelper {
       final now    = DateTime.now();
       final cutoff = now.add(const Duration(minutes: 1));
       int notifId  = 3000;
+      // Repeat-during-the-day slots get their own high ID range, well clear
+      // of notifId (3000+, grows per contact) and summaryId (2000-2023), so
+      // there's no risk of collision even with many contacts.
+      int repeatId = 50000;
 
       // ── Per-contact notifications ──────────────────────────────────────
       for (final row in contacts) {
@@ -237,6 +249,24 @@ class NotificationHelper {
             tz.TZDateTime.from(slot.notifDt, tz.local),
           );
           scheduled++;
+
+          // ── Optional same-day repeats (IDs 50000+) ─────────────────────
+          // Only for the actual day-of slot (daysLabel == 0), never for
+          // advance-notice slots -- repeating "N days before" reminders
+          // would be confusing. Stops at the end of that calendar day.
+          if (slot.daysLabel == 0 && remindAllDay && remindInterval > 0) {
+            final endOfDay = DateTime(
+                slot.birthday.year, slot.birthday.month, slot.birthday.day, 23, 59, 0);
+            var repeatAt = slot.notifDt.add(Duration(minutes: remindInterval));
+            while (repeatAt.isBefore(endOfDay) && repeatAt.isAfter(cutoff)) {
+              await _scheduleNotif(
+                repeatId++, title, body,
+                tz.TZDateTime.from(repeatAt, tz.local),
+              );
+              scheduled++;
+              repeatAt = repeatAt.add(Duration(minutes: remindInterval));
+            }
+          }
         }
       }
 

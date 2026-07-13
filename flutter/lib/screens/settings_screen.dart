@@ -34,6 +34,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _monthlySummary = true;
   bool _showPopup = true;
   bool _remindAllDay = false;
+  int _remindInterval = 120;
   bool _loaded = false;
 
   @override
@@ -52,6 +53,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _monthlySummary = await db.getSetting('notif_monthly_summary', '1') == '1';
     _showPopup = await db.getSetting('show_popup', '1') == '1';
     _remindAllDay = await db.getSetting('remind_all_day', '0') == '1';
+    _remindInterval = int.tryParse(await db.getSetting('remind_all_day_interval', '120')) ?? 120;
     if (mounted) setState(() => _loaded = true);
   }
 
@@ -410,7 +412,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 palette: p,
                 onTap: () {
                   setState(() => _remindAllDay = true);
-                  AppDb.instance.setSetting('remind_all_day', '1');
+                  _saveAndReschedule('remind_all_day', '1');
                 }),
             const SizedBox(width: 10),
             OptionButton(
@@ -419,9 +421,48 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 palette: p,
                 onTap: () {
                   setState(() => _remindAllDay = false);
-                  AppDb.instance.setSetting('remind_all_day', '0');
+                  _saveAndReschedule('remind_all_day', '0');
                 }),
           ]),
+          if (_remindAllDay) ...[
+            const SizedBox(height: 10),
+            SectionHeader(t(lang, 'set_remind_interval'), palette: p),
+            Row(children: [
+              for (final (mins, key) in const [
+                (30, 'interval_30m'),
+                (60, 'interval_1h'),
+                (120, 'interval_2h'),
+              ])
+                OptionButton(
+                  label: t(lang, key),
+                  active: _remindInterval == mins,
+                  palette: p,
+                  margin: const EdgeInsets.only(right: 8),
+                  onTap: () {
+                    setState(() => _remindInterval = mins);
+                    _saveAndReschedule('remind_all_day_interval', '$mins');
+                  },
+                ),
+            ]),
+            const SizedBox(height: 8),
+            Row(children: [
+              for (final (mins, key) in const [
+                (180, 'interval_3h'),
+                (240, 'interval_4h'),
+                (360, 'interval_6h'),
+              ])
+                OptionButton(
+                  label: t(lang, key),
+                  active: _remindInterval == mins,
+                  palette: p,
+                  margin: const EdgeInsets.only(right: 8),
+                  onTap: () {
+                    setState(() => _remindInterval = mins);
+                    _saveAndReschedule('remind_all_day_interval', '$mins');
+                  },
+                ),
+            ]),
+          ],
           const SizedBox(height: 12),
           SolidButton(t(lang, 'test_push_btn'), p.cyan,
               onPressed: () => NotificationHelper.fireTestNotification(lang)),

@@ -94,7 +94,8 @@ class DetailScreen extends StatelessWidget {
           ),
         ],
       ),
-      body: ListView(
+      body: SafeArea(
+        child: ListView(
         padding: const EdgeInsets.fromLTRB(14, 8, 14, 16),
         children: [
           _card(
@@ -185,6 +186,7 @@ class DetailScreen extends StatelessWidget {
             ),
           ],
         ],
+        ),
       ),
     );
   }

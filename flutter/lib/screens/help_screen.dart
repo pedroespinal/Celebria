@@ -26,33 +26,35 @@ class HelpScreen extends StatelessWidget {
         ),
         title: Text('📖  ${t(lang, 'manual_btn')}', style: TextStyle(color: p.cyan)),
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(14, 8, 14, 16),
-        children: [
-          for (final entry in entries)
-            Container(
-              margin: const EdgeInsets.only(bottom: 10),
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(color: p.card, borderRadius: BorderRadius.circular(12)),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(entry.icon, style: const TextStyle(fontSize: 20)),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(entry.title,
-                            style: TextStyle(fontSize: 14, color: p.cyan, fontWeight: FontWeight.bold)),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(entry.body, style: TextStyle(fontSize: 12, color: p.t1, height: 1.4)),
-                ],
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(14, 8, 14, 16),
+          children: [
+            for (final entry in entries)
+              Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(color: p.card, borderRadius: BorderRadius.circular(12)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(entry.icon, style: const TextStyle(fontSize: 20)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(entry.title,
+                              style: TextStyle(fontSize: 14, color: p.cyan, fontWeight: FontWeight.bold)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(entry.body, style: TextStyle(fontSize: 12, color: p.t1, height: 1.4)),
+                  ],
+                ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }

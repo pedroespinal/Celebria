@@ -110,7 +110,8 @@ class StatsScreen extends StatelessWidget {
         ),
         title: Text('📊  ${t(lang, 'stats_title')}', style: TextStyle(color: p.cyan)),
       ),
-      body: ListView(
+      body: SafeArea(
+        child: ListView(
         padding: const EdgeInsets.fromLTRB(14, 8, 14, 16),
         children: [
           Row(children: [
@@ -302,6 +303,7 @@ class StatsScreen extends StatelessWidget {
             ),
           ),
         ],
+        ),
       ),
     );
   }

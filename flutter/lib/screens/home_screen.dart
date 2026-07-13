@@ -77,7 +77,7 @@ class HomeScreen extends StatelessWidget {
                           const SizedBox(width: 6),
                           Text(monthLabel,
                               style: TextStyle(
-                                  fontSize: 12, color: palette.bg, fontWeight: FontWeight.w600)),
+                                  fontSize: 12, color: palette.bg, fontWeight: FontWeight.bold)),
                         ],
                       ),
                     ),

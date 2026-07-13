@@ -134,7 +134,7 @@ class StatsScreen extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(t(lang, 'stats_next'), style: TextStyle(fontSize: 10, color: p.t3)),
-                    Text(nxtTxt, style: TextStyle(fontSize: 13, color: nxtCol, fontWeight: FontWeight.w600)),
+                    Text(nxtTxt, style: TextStyle(fontSize: 13, color: nxtCol, fontWeight: FontWeight.bold)),
                   ],
                 ),
               ),
@@ -146,7 +146,7 @@ class StatsScreen extends StatelessWidget {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(t(lang, 'stats_by_rel'), style: TextStyle(fontSize: 11, color: p.t2, fontWeight: FontWeight.w600)),
+                Text(t(lang, 'stats_by_rel'), style: TextStyle(fontSize: 11, color: p.t2, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
                 for (final rk in ['family', 'friend', 'work', 'other'])
                   if ((relCount[rk] ?? 0) > 0)
@@ -184,7 +184,7 @@ class StatsScreen extends StatelessWidget {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(t(lang, 'stats_by_month'), style: TextStyle(fontSize: 11, color: p.t2, fontWeight: FontWeight.w600)),
+                Text(t(lang, 'stats_by_month'), style: TextStyle(fontSize: 11, color: p.t2, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -229,7 +229,7 @@ class StatsScreen extends StatelessWidget {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(t(lang, 'zodiac_title'), style: TextStyle(fontSize: 11, color: p.t2, fontWeight: FontWeight.w600)),
+                Text(t(lang, 'zodiac_title'), style: TextStyle(fontSize: 11, color: p.t2, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
                 if (zodiacCount.isEmpty)
                   Text(t(lang, 'stats_none'), style: TextStyle(fontSize: 11, color: p.t3))
@@ -270,7 +270,7 @@ class StatsScreen extends StatelessWidget {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(t(lang, 'stats_milestones'), style: TextStyle(fontSize: 11, color: p.t2, fontWeight: FontWeight.w600)),
+                Text(t(lang, 'stats_milestones'), style: TextStyle(fontSize: 11, color: p.t2, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
                 if (milestoneRows.isEmpty)
                   Text(t(lang, 'stats_no_milestones'), style: TextStyle(fontSize: 11, color: p.t3))
@@ -288,7 +288,7 @@ class StatsScreen extends StatelessWidget {
                                 Text(pair.$1.name,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(fontSize: 12, color: p.yellow, fontWeight: FontWeight.w600)),
+                                    style: TextStyle(fontSize: 12, color: p.yellow, fontWeight: FontWeight.bold)),
                                 Text(
                                     '${pair.$2} ${t(lang, 'years')}  •  ${daysUntil(pair.$1.day, pair.$1.month) == 0 ? t(lang, 'today_badge') : '${daysUntil(pair.$1.day, pair.$1.month)} ${t(lang, 'stats_days')}'}',
                                     style: TextStyle(fontSize: 10, color: p.t3)),

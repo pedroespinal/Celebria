@@ -179,7 +179,7 @@ class DetailScreen extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   child: Text('💬  ${t(lang, 'btn_whatsapp')}',
                       textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                 ),
               ),
             ),

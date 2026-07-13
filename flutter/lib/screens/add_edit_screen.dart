@@ -177,7 +177,7 @@ class _AddEditScreenState extends State<AddEditScreen> {
 
   Widget _fieldLabel(String text, Palette p) => Padding(
         padding: const EdgeInsets.only(bottom: 4),
-        child: Text(text, style: TextStyle(fontSize: 11, color: p.t2, fontWeight: FontWeight.w600)),
+        child: Text(text, style: TextStyle(fontSize: 11, color: p.t2, fontWeight: FontWeight.bold)),
       );
 
   @override
@@ -378,7 +378,7 @@ class _AddEditScreenState extends State<AddEditScreen> {
                   children: [
                     Text(t(lang, 'confirm_delete'),
                         textAlign: TextAlign.center,
-                        style: TextStyle(color: p.yellow, fontSize: 13, fontWeight: FontWeight.w600)),
+                        style: TextStyle(color: p.yellow, fontSize: 13, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 10),
                     Row(
                       children: [

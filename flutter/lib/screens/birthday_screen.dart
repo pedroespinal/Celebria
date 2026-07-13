@@ -121,7 +121,7 @@ class _BirthdayScreenState extends State<BirthdayScreen> {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     ),
                     child: Text('🎉  ${t(lang, 'popup_close')}',
-                        style: const TextStyle(fontWeight: FontWeight.w600)),
+                        style: const TextStyle(fontWeight: FontWeight.bold)),
                   ),
                 ),
               ),
@@ -157,7 +157,7 @@ class _BirthdayScreenState extends State<BirthdayScreen> {
           Text(line,
               textAlign: TextAlign.center,
               style: TextStyle(
-                  fontSize: 16, color: isMilestone ? p.yellow : p.cyan, fontWeight: FontWeight.w600)),
+                  fontSize: 16, color: isMilestone ? p.yellow : p.cyan, fontWeight: FontWeight.bold)),
           if (phoneDigits.isNotEmpty)
             TextButton(
               onPressed: () {

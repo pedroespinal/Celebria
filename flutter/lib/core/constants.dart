@@ -2,7 +2,7 @@
 library;
 
 const String appName = 'Celebria';
-const String appVersion = '1.9.2';
+const String appVersion = '1.9.3';
 const String appAuthor = 'Pedro Espinal';
 const String appRights = 'Todos los derechos reservados';
 const String githubRepo = 'pedroespinal/Celebria';

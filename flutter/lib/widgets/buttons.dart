@@ -23,7 +23,7 @@ class SolidButton extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 14),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
-      child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+      child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
     );
     return expand ? SizedBox(width: double.infinity, child: button) : button;
   }
@@ -73,7 +73,7 @@ class OptionButton extends StatelessWidget {
           style: TextStyle(
             fontSize: 11,
             color: active ? palette.cyan : palette.t3,
-            fontWeight: FontWeight.w600,
+            fontWeight: FontWeight.bold,
           ),
         ),
       ),

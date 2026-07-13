@@ -67,13 +67,17 @@ class OptionButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: active ? palette.cyan : palette.border),
         ),
-        child: Text(
-          label,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 11,
-            color: active ? palette.cyan : palette.t3,
-            fontWeight: FontWeight.bold,
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            style: TextStyle(
+              fontSize: 11,
+              color: active ? palette.cyan : palette.t3,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ),
       ),

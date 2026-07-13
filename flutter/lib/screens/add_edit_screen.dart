@@ -208,13 +208,15 @@ class _AddEditScreenState extends State<AddEditScreen> {
                     _fieldLabel(t(lang, 'field_day'), p),
                     DropdownButtonFormField<int>(
                       initialValue: _day,
-                      hint: const Text('DD'),
+                      isExpanded: true,
+                      hint: const Text('DD', overflow: TextOverflow.ellipsis),
                       decoration: _dec(p, 'DD'),
                       dropdownColor: p.bg3,
                       style: TextStyle(color: p.t1),
                       items: [
                         for (var i = 1; i <= 31; i++)
-                          DropdownMenuItem(value: i, child: Text('$i'))
+                          DropdownMenuItem(
+                              value: i, child: Text('$i', overflow: TextOverflow.ellipsis))
                       ],
                       onChanged: (v) => setState(() => _day = v),
                     ),
@@ -229,13 +231,16 @@ class _AddEditScreenState extends State<AddEditScreen> {
                     _fieldLabel(t(lang, 'field_month'), p),
                     DropdownButtonFormField<int>(
                       initialValue: _month,
-                      hint: const Text('MM'),
+                      isExpanded: true,
+                      hint: const Text('MM', overflow: TextOverflow.ellipsis),
                       decoration: _dec(p, 'MM'),
                       dropdownColor: p.bg3,
                       style: TextStyle(color: p.t1),
                       items: [
                         for (var i = 1; i <= 12; i++)
-                          DropdownMenuItem(value: i, child: Text(monthName(lang, i)))
+                          DropdownMenuItem(
+                              value: i,
+                              child: Text(monthName(lang, i), overflow: TextOverflow.ellipsis))
                       ],
                       onChanged: (v) => setState(() => _month = v),
                     ),
@@ -250,13 +255,17 @@ class _AddEditScreenState extends State<AddEditScreen> {
                     _fieldLabel(t(lang, 'field_year'), p),
                     DropdownButtonFormField<int?>(
                       initialValue: _year,
+                      isExpanded: true,
                       decoration: _dec(p, t(lang, 'field_year')),
                       dropdownColor: p.bg3,
                       style: TextStyle(color: p.t1),
                       items: [
-                        DropdownMenuItem<int?>(value: null, child: Text('— ${t(lang, 'field_year')} —')),
+                        DropdownMenuItem<int?>(
+                            value: null,
+                            child: Text(t(lang, 'field_year_none'), overflow: TextOverflow.ellipsis)),
                         for (var y = currentYear; y > 1919; y--)
-                          DropdownMenuItem<int?>(value: y, child: Text('$y')),
+                          DropdownMenuItem<int?>(
+                              value: y, child: Text('$y', overflow: TextOverflow.ellipsis)),
                       ],
                       onChanged: (v) => setState(() => _year = v),
                     ),

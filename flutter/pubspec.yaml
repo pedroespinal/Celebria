@@ -2,7 +2,7 @@
 description: "Celebria — Recordatorio de Cumpleanos"
 publish_to: 'none'
 
-version: 1.9.3+10903
+version: 1.9.4+10904
 
 environment:
   sdk: ^3.11.5

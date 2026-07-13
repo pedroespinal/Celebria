@@ -141,7 +141,21 @@ class NotificationHelper {
         columns: ['name', 'day', 'month', 'year'],
       );
 
-      await _notif.cancelAll();
+      // cancelAll() can throw PlatformException("Missing type parameter")
+      // when it tries to load/migrate notifications that were persisted by
+      // an older flutter_local_notifications version (e.g. leftover data
+      // from before this rewrite, or from any earlier plugin version).
+      // That crash must NOT abort the rest of this function — if it did,
+      // nothing below would ever get (re)scheduled, silently, forever,
+      // since every future call hits the same stuck bad data. Swallow it
+      // here and keep going; the zonedSchedule calls below still overwrite
+      // notifications by id regardless of whether the old ones were
+      // successfully cancelled first.
+      try {
+        await _notif.cancelAll();
+      } catch (e) {
+        print('[Celebria] cancelAll() failed (continuing anyway): $e');
+      }
 
       final now    = DateTime.now();
       final cutoff = now.add(const Duration(minutes: 1));
@@ -320,8 +334,6 @@ class NotificationHelper {
       await _notif.zonedSchedule(
         id, title, body, when, details,
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-        uiLocalNotificationDateInterpretation:
-            UILocalNotificationDateInterpretation.absoluteTime,
       );
     } catch (_) {
       // SCHEDULE_EXACT_ALARM not granted — fall back to inexact
@@ -329,8 +341,6 @@ class NotificationHelper {
         await _notif.zonedSchedule(
           id, title, body, when, details,
           androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-          uiLocalNotificationDateInterpretation:
-              UILocalNotificationDateInterpretation.absoluteTime,
         );
       } catch (e) {
         print('[Celebria] Could not schedule notif $id: $e');

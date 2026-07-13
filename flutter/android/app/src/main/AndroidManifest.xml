@@ -69,6 +69,24 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
+
+        <!-- REQUERIDO por flutter_local_notifications: el plugin NO declara estos
+             receivers en su propio manifest (ver android/src/main/AndroidManifest.xml
+             del paquete — solo pide permisos). Sin esta declaración explícita,
+             AlarmManager dispara la alarma pero Android no tiene a quién entregar
+             el broadcast, así que zonedSchedule() nunca falla pero la notificación
+             tampoco llega nunca. Esta fue la causa raíz real de "las notificaciones
+             programadas no funcionan" — no las que se arreglaron antes. -->
+        <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver" />
+        <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />
+        <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON"/>
+            </intent-filter>
+        </receiver>
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

@@ -169,7 +169,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (dialogCtx) => StatefulBuilder(
         builder: (dialogCtx, setDialogState) => AlertDialog(
           backgroundColor: p.bg2,
-          title: Text('Importar contactos', style: TextStyle(color: p.cyan)),
+          title: Text(t(lang, 'import_contacts_title'), style: TextStyle(color: p.cyan)),
           content: SizedBox(
             width: 300,
             height: 360,
@@ -212,7 +212,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 NotificationHelper.scheduleFromDB();
                 if (mounted) _toast('✓  $imported ${t(lang, 'import_ok')}');
               },
-              child: Text(t(lang, 'confirm_yes'), style: TextStyle(color: p.cyan)),
+              child: Text(t(lang, 'confirm_import'), style: TextStyle(color: p.cyan)),
             ),
           ],
         ),

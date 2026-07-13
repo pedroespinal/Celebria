@@ -5,7 +5,7 @@
 Celebria es una app Android personal para nunca olvidar un cumpleaños.  
 Paleta Fiesta (teal + coral + dorado), dark y light mode, bilingüe ES/EN, sin publicidad y sin conexión requerida para su uso principal.
 
-[![Versión](https://img.shields.io/badge/versión-1.9.0-ff6b6b?style=flat-square)](https://github.com/pedroespinal/Celebria/releases/latest)
+[![Versión](https://img.shields.io/badge/versión-1.9.2-ff6b6b?style=flat-square)](https://github.com/pedroespinal/Celebria/releases/latest)
 [![Plataforma](https://img.shields.io/badge/plataforma-Android-6bcb77?style=flat-square)](https://github.com/pedroespinal/Celebria/releases/latest)
 [![Flutter](https://img.shields.io/badge/Flutter-Dart-ffd93d?style=flat-square)](https://flutter.dev/)
 
@@ -106,8 +106,10 @@ C:\Celebria\
 
 ## 🔔 Cómo funcionan las notificaciones push
 
-Las notificaciones se programan **cada vez que el usuario abre la app**. El código Dart
-lee la base de datos SQLite y agenda hasta **4 slots por contacto** (2 años × 2 tipos):
+Las notificaciones se reprograman **al instante tras cualquier cambio** — agregar o
+editar un contacto, cambiar la hora o los días de anticipación en Configuración — y
+también al abrir la app. El código Dart lee la base de datos SQLite directamente
+(mismo proceso, sin intermediarios) y agenda hasta **4 slots por contacto** (2 años × 2 tipos):
 
 | Slot | Cuándo llega                                    |
 |------|-------------------------------------------------|
@@ -119,9 +121,17 @@ lee la base de datos SQLite y agenda hasta **4 slots por contacto** (2 años × 
 Esto significa que **no necesitas abrir la app cada año** para recibir recordatorios —
 quedan programados 2 años por adelantado.
 
-La notificación usa `AndroidScheduleMode.inexactAllowWhileIdle` — se dispara dentro
-de ±1 hora de la hora configurada, incluso en modo Doze, **sin requerir el permiso
-`SCHEDULE_EXACT_ALARM`** (que en Android 12+ requiere aprobación del fabricante).
+Cada notificación intenta programarse primero con `AndroidScheduleMode.exactAllowWhileIdle`
+(hora exacta, incluso en modo Doze); si el permiso de alarmas exactas no está concedido,
+cae automáticamente a `inexactAllowWhileIdle` (llega dentro de una ventana de minutos,
+sin requerir ese permiso).
+
+> **Fix crítico en v1.9.2:** hasta esta versión las notificaciones programadas (no las
+> inmediatas de prueba) nunca llegaban a entregarse — `AndroidManifest.xml` no declaraba
+> los receivers que el plugin de notificaciones necesita para eso, y una versión vieja
+> del plugin tenía además un bug que hacía fallar el guardado silenciosamente. Ambos se
+> arreglaron y se verificaron con pruebas reales (notificación programada disparándose a
+> su hora exacta, y sobreviviendo un reinicio completo del teléfono).
 
 **"También notificar el día del cumpleaños":** se activa desde Configuración → Notificaciones.
 Cuando está ON, se programa un segundo recordatorio la mañana misma del cumpleaños.
@@ -231,6 +241,8 @@ No requiere recompilar la app.
 
 ## ⚠ Quirks conocidos
 
+- **`flutter_local_notifications` NO declara en su propio manifest los receivers que necesita para entregar notificaciones programadas** (`ScheduledNotificationReceiver`, `ScheduledNotificationBootReceiver`, `ActionBroadcastReceiver`) — hay que copiarlos a mano en `AndroidManifest.xml` (ver el `example/` del paquete). Sin esto, `zonedSchedule()` no lanza ningún error y `AlarmManager` sí dispara la alarma a su hora — pero Android no tiene a quién entregarle el broadcast, así que la notificación nunca llega. Esta fue la causa raíz real de que las notificaciones programadas no funcionaran hasta v1.9.2 — el botón de prueba (`show()` inmediato) no necesita estos receivers, por eso parecía que todo andaba bien.
+- Usar `flutter_local_notifications: ^19.5.0` o superior, no `18.x` — versiones anteriores a 19.0.0 tienen un bug de GSON conocido (`PlatformException("Missing type parameter")`) que hace fallar silenciosamente `zonedSchedule()`/`cancelAll()` en cada llamada. No subir directo a `20.x`+: esa versión convierte los parámetros posicionales a nombrados (breaking change) y `21.x` sube el `minSdk` a API 24.
 - `flutter_local_notifications` requiere `isCoreLibraryDesugaringEnabled = true` + `coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")` en `build.gradle.kts` — sin esto Gradle falla con `checkReleaseAarMetadata`
 - `notification_helper.dart` **nunca** debe abrir su propia conexión sqflite ni cerrarla — debe usar `AppDb.instance.raw`, que comparte la ÚNICA conexión de la app. `sqflite` cachea conexiones por ruta (`singleInstance: true` por defecto), así que un `openDatabase()` independiente al mismo archivo devuelve la MISMA conexión — cerrarla rompe toda la app por el resto de la sesión
 - Cualquier widget cuyo `build()` retorne `Expanded(...)` (como `OptionButton`) NUNCA debe envolverse en `Padding` desde afuera — `Expanded` requiere ser hijo directo de un `Row`/`Column`. En modo release este error se ve como un simple **recuadro gris sin texto** (no el overlay rojo/amarillo de debug) — revisar `adb logcat` buscando "DiagnosticsProperty" si aparece
@@ -251,6 +263,13 @@ así que las notificaciones solo se recalculaban al reiniciar la app por complet
 Todas las funciones se mantuvieron — no fue un recorte de features, sino una migración de
 plataforma que además simplificó el pipeline de build (de 2 fases a 1) y redujo el tamaño
 del APK de ~72MB a ~51MB.
+
+**Nota adicional — v1.9.2:** incluso después de la reescritura, las notificaciones
+programadas seguían sin llegar nunca. La causa real (ver "Quirks conocidos" arriba) no
+tenía nada que ver con Python/Flet ni con el código Dart de la app: el `AndroidManifest.xml`
+jamás declaró los receivers que `flutter_local_notifications` necesita para entregar una
+alarma programada, y el plugin en sí tenía un bug de serialización que fallaba en silencio.
+Arreglado y verificado con pruebas reales en v1.9.2.
 
 ---
 

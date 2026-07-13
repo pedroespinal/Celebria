@@ -1,3 +1,8 @@
+# Signing keystore — never commit
+*.jks
+*.keystore
+key.properties
+
 # Flet build output
 build/
 

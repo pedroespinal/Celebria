@@ -3,12 +3,11 @@
 **Recordatorio de Cumpleaños para Android**
 
 Celebria es una app Android personal para nunca olvidar un cumpleaños.  
-Diseño futurista oscuro, bilingüe ES/EN, sin publicidad y sin conexión requerida para su uso principal.
+Paleta Fiesta (teal + coral + dorado), dark y light mode, bilingüe ES/EN, sin publicidad y sin conexión requerida para su uso principal.
 
-[![Versión](https://img.shields.io/badge/versión-1.5.1-00e5ff?style=flat-square)](https://github.com/pedroespinal/Celebria/releases/latest)
-[![Plataforma](https://img.shields.io/badge/plataforma-Android-00ff88?style=flat-square)](https://github.com/pedroespinal/Celebria/releases/latest)
-[![Python](https://img.shields.io/badge/Python-3-yellow?style=flat-square)](https://www.python.org/)
-[![Flet](https://img.shields.io/badge/Flet-0.85.1-7c3aed?style=flat-square)](https://flet.dev/)
+[![Versión](https://img.shields.io/badge/versión-1.9.0-ff6b6b?style=flat-square)](https://github.com/pedroespinal/Celebria/releases/latest)
+[![Plataforma](https://img.shields.io/badge/plataforma-Android-6bcb77?style=flat-square)](https://github.com/pedroespinal/Celebria/releases/latest)
+[![Flutter](https://img.shields.io/badge/Flutter-Dart-ffd93d?style=flat-square)](https://flutter.dev/)
 
 ---
 
@@ -25,8 +24,13 @@ Diseño futurista oscuro, bilingüe ES/EN, sin publicidad y sin conexión requer
 
 ## ✨ Características
 
-- 🔔 **Notificaciones push** — avisa automáticamente del cumpleaños aunque la app esté cerrada, a la hora que configures
+- 🔔 **Notificaciones push** — programa automáticamente hasta **2 años por adelantado** para que lleguen aunque no abras la app; N días antes + opción de notificar también el día del cumpleaños
+- 🔔✅ **Detección automática de notificaciones apagadas** — si el sistema las bloqueó, aparece un aviso nativo al abrir la app con acceso directo a Configuración
+- ⏰ **Selector de hora exacto** — elige hora (00–23) y cualquier minuto (:00 a :59) para las notificaciones
+- 🧪 **Notificación de prueba** — botón en Configuración para enviar un push real de inmediato y confirmar que Android las muestra
 - 🎂 Popup de felicitación al abrir la app el día del cumpleaños, con melodía festiva generada en memoria
+- 💬 **Botón WhatsApp** — envía un mensaje de felicitación pre-redactado con un toque en el popup de cumpleaños
+- 📱 **Widget en pantalla de inicio** — muestra el próximo cumpleaños con nombre, fecha y días restantes, se actualiza automáticamente
 - 👥 Contactos con nombre, fecha, teléfono, email, notas y tipo de relación (Familia / Amigo / Trabajo / Otro)
 - 📸 **Foto por contacto** — avatar personalizado o círculo con inicial en el color de la relación
 - 🎁 **Nota de regalo** — guarda ideas de regalo por contacto
@@ -35,8 +39,8 @@ Diseño futurista oscuro, bilingüe ES/EN, sin publicidad y sin conexión requer
 - 📋 Secciones automáticas: **Hoy · Esta Semana · Próximamente · Todos**
 - 🔍 Búsqueda en tiempo real (teclado siempre abierto) + filtro por tipo de relación
 - 📆 Calendario mensual con días de cumpleaños destacados
-- 💬 Botón WhatsApp directo por contacto
 - 📤 Exportar / Importar contactos en JSON
+- 🎨 **Paleta Fiesta** — dark mode teal oscuro + light mode crema cálida, con acentos coral, dorado y lima
 - 🌙 Tema oscuro / claro con toggle instantáneo
 - 🌐 Bilingüe Español / Inglés con cambio en tiempo real (incluyendo footer y About)
 - 🔄 Verificador de actualizaciones automático al abrir la app (aparece en Home)
@@ -46,15 +50,20 @@ Diseño futurista oscuro, bilingüe ES/EN, sin publicidad y sin conexión requer
 
 ## 🛠 Stack técnico
 
+Celebria es 100% **Flutter/Dart** (reescrita desde cero en julio 2026 — antes era un híbrido
+Python/Flet + Flutter, ver nota histórica al final).
+
 | Componente       | Tecnología                                      |
 |------------------|-------------------------------------------------|
-| Lenguaje         | Python 3                                        |
-| UI Framework     | Flet 0.85.1 → Flutter → Android                |
-| Base de datos    | SQLite (local, sin servidor)                    |
-| Audio            | flet_audio 0.85.1                              |
-| Push notifications | flutter_local_notifications + sqflite + timezone + flutter_timezone |
-| Build            | `flet build apk` + `flutter build apk --release` (2 pasos) |
-| Release          | PowerShell + GitHub Releases API               |
+| Lenguaje         | Dart                                             |
+| UI Framework     | Flutter (Android nativo)                        |
+| Estado           | `provider` (ChangeNotifier simple)              |
+| Base de datos    | SQLite vía `sqflite` (local, sin servidor)      |
+| Audio            | `audioplayers`                                  |
+| Push notifications | `flutter_local_notifications` + `timezone` + `flutter_timezone` |
+| Archivos         | `file_picker` (fotos, JSON, VCF)                |
+| Build            | `flutter build apk --release` (un solo paso)    |
+| Release          | PowerShell + GitHub Releases API                |
 | Credenciales     | Windows Credential Manager                      |
 
 ---
@@ -63,22 +72,34 @@ Diseño futurista oscuro, bilingüe ES/EN, sin publicidad y sin conexión requer
 
 ```
 C:\Celebria\
-├── main.py                            # App completa en un solo archivo (~3044 líneas)
-├── requirements.txt                   # flet-audio==0.85.1
-├── pyproject.toml                     # Config Flet + paquetes Flutter de notificaciones
 ├── version.json                       # Control de versiones para actualizaciones in-app
 ├── release.ps1                        # Script de release completamente automatizado
+├── make_icon.py                       # Genera assets/icon.png (herramienta de diseño, no forma parte de la app)
 ├── README.md                          # Este archivo
-├── flutter/                           # Overlay de archivos Dart personalizados
-│   ├── lib/
-│   │   ├── main.dart                  # Entry point con NotificationHelper.initialize()
-│   │   └── notification_helper.dart  # Lógica de notificaciones push
-│   ├── android/
-│   │   ├── AndroidManifest.xml       # Permisos: POST_NOTIFICATIONS, BOOT_COMPLETED, VIBRATE
-│   │   └── app/
-│   │       └── build.gradle.kts      # isCoreLibraryDesugaringEnabled + desugar_jdk_libs
-│   └── pubspec.yaml                   # (referencia — las deps van en pyproject.toml)
-└── .gitignore
+├── assets/
+│   └── icon.png                       # Ícono fuente (cake + campana, paleta Fiesta)
+└── flutter/                           # TODO el proyecto Flutter — único código fuente de la app
+    ├── pubspec.yaml                   # Dependencias + versión (version: X.Y.Z+buildNumber)
+    ├── assets/
+    │   └── birthday.wav               # Melodía de cumpleaños
+    ├── lib/
+    │   ├── main.dart                  # Entry point, MaterialApp, birthday/update-check al abrir
+    │   ├── notification_helper.dart   # Notificaciones: scheduleFromDB(), llamado directo tras cada escritura a la DB
+    │   ├── core/                      # constants, palette, i18n, date_utils, vcf_parser
+    │   ├── data/db.dart                # Wrapper sqflite (singleton — ver AppDb.raw)
+    │   ├── models/contact.dart
+    │   ├── state/app_state.dart       # ChangeNotifier compartido (contactos, idioma, tema)
+    │   ├── widgets/                   # app_shell (bottom-nav), contact_card, buttons, avatar
+    │   └── screens/                   # home, add_edit, detail, calendar, settings, stats, help, birthday
+    └── android/
+        ├── app/src/main/
+        │   ├── AndroidManifest.xml    # Permisos: POST_NOTIFICATIONS, BOOT_COMPLETED, VIBRATE + receivers
+        │   ├── kotlin/com/flet/celebria/
+        │   │   ├── MainActivity.kt    # Detecta notificaciones/alarmas desactivadas → popup nativo
+        │   │   ├── BootReceiver.kt    # Reprograma notificaciones tras reinicio del teléfono
+        │   │   └── BirthdayWidget.kt  # Widget de pantalla de inicio (AppWidgetProvider)
+        │   └── res/                   # layout/xml del widget, íconos generados por flutter_launcher_icons
+        └── app/build.gradle.kts       # applicationId com.flet.celebria (mantenido para continuidad de updates)
 ```
 
 ---
@@ -86,65 +107,90 @@ C:\Celebria\
 ## 🔔 Cómo funcionan las notificaciones push
 
 Las notificaciones se programan **cada vez que el usuario abre la app**. El código Dart
-lee la base de datos SQLite, obtiene todos los contactos y agenda una notificación
-por persona para el próximo cumpleaños (o N días antes, según la configuración).
+lee la base de datos SQLite y agenda hasta **4 slots por contacto** (2 años × 2 tipos):
+
+| Slot | Cuándo llega                                    |
+|------|-------------------------------------------------|
+| 1    | N días antes del cumpleaños — año corriente     |
+| 2    | El día del cumpleaños — año corriente (si activo) |
+| 3    | N días antes del cumpleaños — año siguiente     |
+| 4    | El día del cumpleaños — año siguiente (si activo) |
+
+Esto significa que **no necesitas abrir la app cada año** para recibir recordatorios —
+quedan programados 2 años por adelantado.
 
 La notificación usa `AndroidScheduleMode.inexactAllowWhileIdle` — se dispara dentro
 de ±1 hora de la hora configurada, incluso en modo Doze, **sin requerir el permiso
 `SCHEDULE_EXACT_ALARM`** (que en Android 12+ requiere aprobación del fabricante).
 
+**"También notificar el día del cumpleaños":** se activa desde Configuración → Notificaciones.
+Cuando está ON, se programa un segundo recordatorio la mañana misma del cumpleaños.
+
 **Requisito en Android 13+:** la app pedirá permiso `POST_NOTIFICATIONS` la primera
 vez que se abre. Si el usuario lo deniega, no llegará ninguna notificación.
 Para activarlo después: Ajustes → Apps → Celebria → Permisos → Notificaciones → ON.
+
+**Aviso automático si las notificaciones están apagadas:** al abrir la app, Celebria
+detecta nativamente si las notificaciones (o el permiso de alarmas exactas en
+Android 12+) están desactivadas, y muestra un popup con un botón que abre
+directo la pantalla de Configuración correspondiente. El aviso respeta un
+enfriamiento de 12 h para no repetirse en cada apertura.
+
+---
+
+## 📱 Widget de pantalla de inicio
+
+El widget muestra el **próximo cumpleaños** directamente en el home screen de Android.
+
+**Cómo agregarlo:**
+1. Mantén presionado un espacio vacío en tu pantalla de inicio
+2. Toca **Widgets** → busca **Celebria**
+3. Arrástralo a donde quieras (tamaño mínimo 2×2 celdas)
+
+**Qué muestra:**
+- Nombre completo del contacto
+- Fecha de cumpleaños (dd/mm)
+- Días restantes o "¡Hoy!" si es el día
+
+**Actualizaciones:** el widget se refresca automáticamente cada 30 minutos. También se actualiza cuando abres la app o cuando el teléfono reinicia.
+
+> **Nota técnica:** el widget lee la base de datos SQLite directamente desde Kotlin sin depender de que la app esté abierta. Funciona completamente en segundo plano.
 
 ---
 
 ## 🔧 Cómo compilar
 
-El build es un proceso de **dos fases** (necesario para incluir el código Dart de notificaciones):
+Un solo paso — ya no hay empaquetado de Python ni build de dos fases.
 
 ```powershell
 # Requisitos previos:
-# - Python 3 + Flet 0.85.1 (pip install flet==0.85.1)
 # - Flutter SDK en PATH
 # - Android SDK con licencias aceptadas
 # - Java 17
 
-Set-Location "C:\Celebria"
-
-# Fase 1: Flet empaqueta el código Python en app.zip y genera el proyecto Flutter
-$env:PYTHONIOENCODING = "utf-8"
-$env:PYTHONUTF8       = "1"
-$env:NO_COLOR         = "1"
-chcp 65001
-flet build apk --artifact "Celebria-X.Y.Z"
-# Puede fallar en el paso de Gradle — es normal; app.zip ya está creado
-
-# Fase 2: Compilar Flutter con el código de notificaciones
-# (release.ps1 hace esto automáticamente en el paso 2.5)
-$env:SERIOUS_PYTHON_SITE_PACKAGES = "$PWD\build\site-packages"
-Set-Location "build\flutter"
-flutter build apk --release --no-version-check --suppress-analytics
-# APK en: build\flutter\build\app\outputs\apk\release\app-release.apk
+$env:PATH = "C:\Users\D0nGibaFok\flutter\3.41.7\bin;" + $env:PATH
+Set-Location "C:\Celebria\flutter"
+flutter build apk --release
+# APK en: flutter\build\app\outputs\flutter-apk\app-release.apk
 ```
 
-> **Nota:** `release.ps1` maneja este proceso completo automáticamente.
+> **Nota:** `release.ps1` maneja este proceso completo automáticamente, incluyendo el versionado.
 
 ---
 
 ## 🚀 Cómo publicar un release
 
 ```powershell
-.\release.ps1 -Version "X.Y.Z" -Notes "Descripción del cambio" -SkipTest
+.\release.ps1 -Version "X.Y.Z" -Notes "Descripción del cambio"
 ```
 
-El script hace todo automáticamente en 6 pasos:
+El script hace todo automáticamente:
 
-1. ~~Prueba local~~ (omitida con `-SkipTest`)
-2. Actualiza `APP_VERSION` en `main.py`
+1. Verifica que la versión sea mayor que la actual (`flutter/lib/core/constants.dart`)
+2. Actualiza `appVersion` en `constants.dart` y `version:` en `flutter/pubspec.yaml`
 3. Actualiza `version.json` (`latest` + `download_url`)
-4. **[2/6]** `flet build apk` — empaqueta Python (puede fallar en Gradle, solo importa que `app.zip` se cree)
-5. **[2.5/6]** Copia archivos Dart personalizados, inyecta paquetes de notificación, recompila con `flutter build apk --release`
+4. `flutter build apk --release`
+5. Limpia `build\apk\` — deja solo el APK de la versión actual
 6. `git commit` + `git tag` + `git push`
 7. Crea el release en GitHub vía API y sube el APK
 
@@ -159,9 +205,9 @@ La app lee `version.json` al arrancar para verificar si hay una versión nueva:
 
 ```json
 {
-  "latest":       "1.5.1",
+  "latest":       "1.7.1",
   "minimum":      "1.0.0",
-  "download_url": "https://github.com/pedroespinal/Celebria/releases/download/v1.5.1/Celebria-v1.5.1.apk"
+  "download_url": "https://github.com/pedroespinal/Celebria/releases/download/v1.7.1/Celebria-v1.7.1.apk"
 }
 ```
 
@@ -185,18 +231,26 @@ No requiere recompilar la app.
 
 ## ⚠ Quirks conocidos
 
-- `flet build apk` requiere `chcp 65001` + `NO_COLOR=1` en Windows para evitar crash de Unicode por la librería `rich`
-- `flet_audio` se envuelve en `Container(visible=False)` → Flutter Offstage: el control funciona (audio) pero no se renderiza, evitando la barra roja
 - `flutter_local_notifications` requiere `isCoreLibraryDesugaringEnabled = true` + `coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")` en `build.gradle.kts` — sin esto Gradle falla con `checkReleaseAarMetadata`
-- `flutter build apk --release` directo (sin Flet) requiere `$env:SERIOUS_PYTHON_SITE_PACKAGES = "$PWD\build\site-packages"` o Gradle falla con "SERIOUS_PYTHON_SITE_PACKAGES is not set"
-- `FilePicker` genera "Unknown control" red bar si se añade a `page.overlay`. Fix definitivo: declarar los pickers ANTES de `render()` y registrarlos DESPUÉS con `page._services.register_service(picker)`. Registrar antes de `render()` causa **pantalla negra**
-- `FilePicker.pick_files()` es **async** en Flet 0.85.1 — usar `async def handler(e): files = await picker.pick_files(...)`. Sin `await` retorna una corutina que se descarta silenciosamente
-- `ft.FilePickerResultEvent` no existe en Flet 0.85.1
-- `page.launch_url()` falla silenciosamente en Android 11+ — usar siempre la propiedad `url=` directamente en el control
-- `page.snack_bar` no existe en Flet 0.85.1 — usar `page.show_dialog(ft.SnackBar(...))`
-- Llamadas de UI desde hilos de fondo (background threads) deben hacerse con `page.run_task(async_fn)` para ejecutarse en el event loop correcto de Flet
-- Las fotos de contactos se almacenan en `FLET_APP_STORAGE_DATA/photos/` (Android) o `~/.celebria/photos/` (desktop)
-- Exportar JSON en Android usa `save_file(src_bytes=)` (requiere bytes); importar usa `pick_files(with_data=True)` (bytes más confiable que path en Android)
+- `notification_helper.dart` **nunca** debe abrir su propia conexión sqflite ni cerrarla — debe usar `AppDb.instance.raw`, que comparte la ÚNICA conexión de la app. `sqflite` cachea conexiones por ruta (`singleInstance: true` por defecto), así que un `openDatabase()` independiente al mismo archivo devuelve la MISMA conexión — cerrarla rompe toda la app por el resto de la sesión
+- Cualquier widget cuyo `build()` retorne `Expanded(...)` (como `OptionButton`) NUNCA debe envolverse en `Padding` desde afuera — `Expanded` requiere ser hijo directo de un `Row`/`Column`. En modo release este error se ve como un simple **recuadro gris sin texto** (no el overlay rojo/amarillo de debug) — revisar `adb logcat` buscando "DiagnosticsProperty" si aparece
+- `NotificationHelper.initialize()` se llama tras el primer frame (`WidgetsBinding.instance.addPostFrameCallback`), no antes de `runApp()` — llamarlo antes puede fallar con `PlatformException` (null Activity) en `requestNotificationsPermission()`
+- **Nunca** llamar `requestExactAlarmsPermission()` automáticamente — confirmado en dispositivo real que esto redirige a una pantalla de Configuración de pantalla completa sin ninguna acción del usuario. El permiso de alarmas exactas es opt-in vía el popup nativo en `MainActivity.kt`
+- Las fotos de contactos se almacenan en `ApplicationDocumentsDirectory/photos/`
+- Exportar JSON usa `FilePicker.platform.saveFile(bytes:)`; importar usa `pickFiles(withData: true)`
+
+---
+
+## 📜 Nota histórica — reescritura de julio 2026
+
+Hasta la v1.8.4, Celebria era un híbrido **Python (Flet 0.85.1) + overlay Flutter/Dart** para
+las notificaciones nativas — un diseño que causó varios bugs difíciles de diagnosticar
+(el más grave: Python no tenía forma de avisarle a Dart que la base de datos había cambiado,
+así que las notificaciones solo se recalculaban al reiniciar la app por completo). En julio
+2026 se reescribió toda la app en Flutter/Dart puro, eliminando Python y Flet totalmente.
+Todas las funciones se mantuvieron — no fue un recorte de features, sino una migración de
+plataforma que además simplificó el pipeline de build (de 2 fases a 1) y redujo el tamaño
+del APK de ~72MB a ~51MB.
 
 ---
 

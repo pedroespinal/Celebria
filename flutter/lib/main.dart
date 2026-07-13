@@ -1,417 +1,147 @@
-import 'dart:async';
-import 'dart:io';
-import 'dart:ui';
-
-import 'package:flet/flet.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:package_info_plus/package_info_plus.dart';
-import 'package:path/path.dart' as path;
-import 'package:path_provider/path_provider.dart' as path_provider;
-import 'package:serious_python/serious_python.dart';
-import 'package:flutter_web_plugins/url_strategy.dart';
-import 'package:window_manager/window_manager.dart';
+import 'package:provider/provider.dart';
 
-import "python.dart";
-
-import 'package:flet_audio/flet_audio.dart' as flet_audio;
+import 'core/date_utils.dart';
+import 'core/palette.dart';
+import 'data/db.dart';
 import 'notification_helper.dart';
+import 'screens/birthday_screen.dart';
+import 'services/update_checker.dart';
+import 'state/app_state.dart';
+import 'widgets/app_shell.dart';
 
-/*
-
-
-
-
-show_boot_screen: False
-boot_screen_message: None
-show_startup_screen: False
-startup_screen_message: None
-hide_window_on_start: None
-*/
-
-const bool isRelease = bool.fromEnvironment('dart.vm.product');
-
-const assetPath = "app/app.zip";
-const pythonModuleName = "main";
-final showAppBootScreen = bool.tryParse("False".toLowerCase()) ?? false;
-const appBootScreenMessage = 'Preparing the app for its first launch…';
-final showAppStartupScreen = bool.tryParse("False".toLowerCase()) ?? false;
-const appStartupScreenMessage = 'Getting things ready…';
-final hideWindowOnStart = bool.tryParse("None".toLowerCase()) ?? false;
-
-List<FletExtension> extensions = [
-
-flet_audio.Extension(),
-
-];
-
-String outLogFilename = "";
-
-// global vars
-List<String> _args = [];
-String pageUrl = "";
-String assetsDir = "";
-String appDir = "";
-Map<String, String> environmentVariables = Map.from(Platform.environment);
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 const MethodChannel _bootChannel = MethodChannel('com.flet.celebria/boot');
 
-// Keeps the AppLifecycleListener alive for the whole process lifetime —
-// a local variable would get garbage-collected and silently stop firing.
+// Keeps the AppLifecycleListener alive for the whole process lifetime — a
+// local variable would get garbage-collected and silently stop firing.
+// ignore: unused_element
 AppLifecycleListener? _lifecycleListener;
 
-// Entry point called by BootReceiver on device restart to reschedule
-// notifications without opening the full app UI.
+/// Entry point called by BootReceiver on device restart to reschedule
+/// notifications without opening the full app UI.
 @pragma('vm:entry-point')
 void backgroundMain() async {
   WidgetsFlutterBinding.ensureInitialized();
-  if (defaultTargetPlatform == TargetPlatform.android) {
-    await NotificationHelper.initialize();
-  }
-  // Tell BootReceiver we're done so it can release its wakelock and
-  // destroy the headless engine instead of waiting for its timeout.
+  await NotificationHelper.initialize();
   try {
     await _bootChannel.invokeMethod('bootRescheduleDone');
   } catch (_) {}
 }
 
-void main(List<String> args) async {
-  // Must be first — required before using any Flutter plugin.
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Schedule birthday notifications from the persisted DB before Python starts.
-  if (defaultTargetPlatform == TargetPlatform.android) {
+  // Deferred to after the first rendered frame — confirmed via direct
+  // device/emulator testing that calling this before runApp() intermittently
+  // crashed inside requestNotificationsPermission() with a null-Activity
+  // PlatformException, because the Activity isn't guaranteed to be attached
+  // to the plugin yet. addPostFrameCallback guarantees a frame was drawn,
+  // which guarantees the Activity is live.
+  WidgetsBinding.instance.addPostFrameCallback((_) async {
     await NotificationHelper.initialize();
 
-    // IMPORTANT: the line above only runs once, at cold start of this Dart
-    // engine/process. Python and Dart share the same SQLite file but there is
-    // no channel for Python to tell Dart "a contact/setting changed, please
-    // reschedule" — so without this listener, any contact added/edited or
-    // notification setting changed while the app keeps running (i.e. the
-    // process is never fully killed) would NEVER get scheduled, since
-    // scheduleFromDB() would never run again. Recomputing on every resume
-    // (leaving and coming back to the app, or even just turning the screen
-    // off and on) keeps the schedule in sync with whatever Python last wrote.
+    // Now that the whole app is Dart, contact/settings screens call
+    // NotificationHelper.scheduleFromDB() directly right after every DB
+    // write — this resume listener is just a safety net (e.g. the DB
+    // changed from a restored backup, or the app was killed and restarted
+    // by the OS mid-edit) rather than the only path, as it was previously.
     _lifecycleListener = AppLifecycleListener(
-      onResume: () {
-        NotificationHelper.scheduleFromDB();
-      },
+      onResume: () => NotificationHelper.scheduleFromDB(),
     );
-  }
-
-  FletDeepLinkingBootstrap.install();
-
-  _args = List<String>.from(args);
-
-  var devPageUrl = const String.fromEnvironment("FLET_PAGE_URL");
-  if (devPageUrl != "") {
-    _args.addAll([devPageUrl, "--debug"]);
-  }
-
-  for (var ext in extensions) {
-    ext.ensureInitialized();
-  }
-
-  runApp(FutureBuilder(
-      future: prepareApp(),
-      builder: (BuildContext context, AsyncSnapshot snapshot) {
-        if (snapshot.hasData) {
-          // OK - start Python program
-          return kIsWeb || (isDesktopPlatform() && _args.isNotEmpty)
-              ? FletApp(
-                  pageUrl: pageUrl,
-                  assetsDir: assetsDir,
-                  showAppStartupScreen: showAppStartupScreen,
-                  appStartupScreenMessage: appStartupScreenMessage,
-                  extensions: extensions)
-              : FutureBuilder(
-                  future: runPythonApp(args),
-                  builder:
-                      (BuildContext context, AsyncSnapshot<String?> snapshot) {
-                    if (snapshot.hasData || snapshot.hasError) {
-                      // error or premature finish
-                      return MaterialApp(
-                        builder: (context, _) => ErrorScreen(
-                            title: "Error running app",
-                            text: snapshot.data ?? snapshot.error.toString()),
-                      );
-                    } else {
-                      // no result of error
-                      return FletApp(
-                          pageUrl: pageUrl,
-                          assetsDir: assetsDir,
-                          showAppStartupScreen: showAppStartupScreen,
-                          appStartupScreenMessage: appStartupScreenMessage,
-                          extensions: extensions);
-                    }
-                  });
-        } else if (snapshot.hasError) {
-          // error
-          return MaterialApp(
-              builder: (context, _) => ErrorScreen(
-                  title: "Error starting app",
-                  text: snapshot.error.toString()));
-        } else {
-          // loading
-          return MaterialApp(
-              builder: (context, _) => showAppBootScreen ? const BootScreen() : const BlankScreen());
-        }
-      }));
-}
-
-Future prepareApp() async {
-  if (!_args.contains("--debug") && isRelease) {
-    // ignore: avoid_returning_null_for_void
-    debugPrint = (String? message, {int? wrapWidth}) => null;
-  } else {
-    _args.remove("--debug");
-  }
-
-  await setupDesktop(hideWindowOnStart: hideWindowOnStart);
-
-  if (kIsWeb) {
-    // web mode - connect via HTTP
-    pageUrl = Uri.base.toString();
-    var routeUrlStrategy = getFletRouteUrlStrategy();
-    if (routeUrlStrategy == "path") {
-      usePathUrlStrategy();
-    }
-    assetsDir = getAssetsDir();
-  } else if (_args.isNotEmpty && isDesktopPlatform()) {
-    // developer mode
-    debugPrint("Flet app is running in Developer mode");
-    pageUrl = _args[0];
-    if (_args.length > 1) {
-      var pidFilePath = _args[1];
-      debugPrint("Args contain a path to PID file: $pidFilePath}");
-      var pidFile = await File(pidFilePath).create();
-      await pidFile.writeAsString("$pid");
-    }
-    if (_args.length > 2) {
-      assetsDir = _args[2];
-      debugPrint("Args contain a path assets directory: $assetsDir}");
-    }
-  } else {
-    // production mode
-    // extract app from asset
-    appDir = await extractAssetZip(assetPath, checkHash: true);
-
-    // set current directory to app path
-    Directory.current = appDir;
-
-    assetsDir = path.join(appDir, "assets");
-
-    // configure apps DATA and TEMP directories
-    WidgetsFlutterBinding.ensureInitialized();
-
-    var appTempPath = (await path_provider.getApplicationCacheDirectory()).path;
-    var appDataPath =
-        (await path_provider.getApplicationDocumentsDirectory()).path;
-
-    if (defaultTargetPlatform != TargetPlatform.iOS &&
-        defaultTargetPlatform != TargetPlatform.android) {
-      // append app name to the path and create dir
-      PackageInfo packageInfo = await PackageInfo.fromPlatform();
-      appDataPath = path.join(appDataPath, "flet", packageInfo.packageName);
-      if (!await Directory(appDataPath).exists()) {
-        await Directory(appDataPath).create(recursive: true);
-      }
-    }
-
-    environmentVariables.putIfAbsent("FLET_APP_STORAGE_DATA", () => appDataPath);
-    environmentVariables.putIfAbsent("FLET_APP_STORAGE_TEMP", () => appTempPath);
-
-    outLogFilename = path.join(appTempPath, "console.log");
-    environmentVariables.putIfAbsent("FLET_APP_CONSOLE", () => outLogFilename);
-
-    environmentVariables.putIfAbsent(
-        "FLET_PLATFORM", () => defaultTargetPlatform.name.toLowerCase());
-
-    if (defaultTargetPlatform == TargetPlatform.windows) {
-      // use TCP on Windows
-      var tcpPort = await getUnusedPort();
-      pageUrl = "tcp://localhost:$tcpPort";
-      environmentVariables.putIfAbsent("FLET_SERVER_PORT", () => tcpPort.toString());
-    } else {
-      // use UDS on other platforms
-      pageUrl = "flet_$pid.sock";
-      environmentVariables.putIfAbsent("FLET_SERVER_UDS_PATH", () => pageUrl);
-    }
-  }
-
-  if (!kIsWeb && assetsDir.isNotEmpty) {
-    environmentVariables.putIfAbsent("FLET_ASSETS_DIR", () => assetsDir);
-  }
-
-  return "";
-}
-
-Future<String?> runPythonApp(List<String> args) async {
-  var argvItems = args.map((a) => "\"${a.replaceAll('"', '\\"')}\"");
-  var argv = "[${argvItems.isNotEmpty ? argvItems.join(',') : '""'}]";
-  var script = pythonScript
-      .replaceAll("{outLogFilename}", outLogFilename.replaceAll("\\", "\\\\"))
-      .replaceAll('{module_name}', pythonModuleName)
-      .replaceAll('{argv}', argv);
-
-  var completer = Completer<String>();
-
-  ServerSocket outSocketServer;
-  String socketAddr = "";
-  StringBuffer pythonOut = StringBuffer();
-
-  if (defaultTargetPlatform == TargetPlatform.windows) {
-    var tcpAddr = "127.0.0.1";
-    outSocketServer = await ServerSocket.bind(tcpAddr, 0);
-    debugPrint(
-        'Python output TCP Server is listening on port ${outSocketServer.port}');
-    socketAddr = "$tcpAddr:${outSocketServer.port}";
-  } else {
-    socketAddr = "stdout_$pid.sock";
-    if (await File(socketAddr).exists()) {
-      await File(socketAddr).delete();
-    }
-    outSocketServer = await ServerSocket.bind(
-        InternetAddress(socketAddr, type: InternetAddressType.unix), 0);
-    debugPrint('Python output Socket Server is listening on $socketAddr');
-  }
-
-  environmentVariables.putIfAbsent("FLET_PYTHON_CALLBACK_SOCKET_ADDR", () => socketAddr);
-
-  void closeOutServer() async {
-    outSocketServer.close();
-
-    int exitCode = int.tryParse(pythonOut.toString().trim()) ?? 0;
-
-    if (exitCode == errorExitCode) {
-      var out = "";
-      if (await File(outLogFilename).exists()) {
-        out = await File(outLogFilename).readAsString();
-      }
-      completer.complete(out);
-    } else {
-      exit(exitCode);
-    }
-  }
-
-  outSocketServer.listen((client) {
-    debugPrint(
-        'Connection from: ${client.remoteAddress.address}:${client.remotePort}');
-    client.listen((data) {
-      var s = String.fromCharCodes(data);
-      pythonOut.write(s);
-    }, onError: (error) {
-      client.close();
-      closeOutServer();
-    }, onDone: () {
-      client.close();
-      closeOutServer();
-    });
   });
 
-  // run python async
-  SeriousPython.runProgram(path.join(appDir, "$pythonModuleName.pyc"),
-      script: script, environmentVariables: environmentVariables);
-
-  // wait for client connection to close
-  return completer.future;
+  runApp(const CelebriaApp());
 }
 
-class ErrorScreen extends StatelessWidget {
-  final String title;
-  final String text;
-
-  const ErrorScreen({super.key, required this.title, required this.text});
+class CelebriaApp extends StatelessWidget {
+  const CelebriaApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
-          child: Container(
-        padding: const EdgeInsets.all(8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  title,
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                TextButton.icon(
-                  onPressed: () {
-                    Clipboard.setData(ClipboardData(text: text));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Copied to clipboard')),
-                    );
-                  },
-                  icon: const Icon(
-                    Icons.copy,
-                    size: 16,
-                  ),
-                  label: const Text("Copy"),
-                )
-              ],
-            ),
-            Expanded(
-                child: SingleChildScrollView(
-              child: SelectableText(text,
-                  style: Theme.of(context).textTheme.bodySmall),
-            ))
-          ],
-        ),
-      )),
-    );
-  }
-}
-
-class BootScreen extends StatelessWidget {
-  const BootScreen({
-    super.key,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const SizedBox(
-              width: 30,
-              height: 30,
-              child: CircularProgressIndicator(strokeWidth: 3),
-            ),
-            const SizedBox(
-              height: 10,
-            ),
-            Text(appBootScreenMessage, style: Theme.of(context).textTheme.bodySmall,)
-          ],
-        ),
+    return ChangeNotifierProvider(
+      create: (_) => AppState()..load(),
+      child: Consumer<AppState>(
+        builder: (context, state, _) {
+          if (!state.loaded) {
+            return const MaterialApp(
+              home: Scaffold(body: Center(child: CircularProgressIndicator())),
+            );
+          }
+          final palette = state.theme == 'dark' ? darkPalette : lightPalette;
+          return MaterialApp(
+            navigatorKey: navigatorKey,
+            title: 'Celebria',
+            debugShowCheckedModeBanner: false,
+            theme: buildThemeData(
+                palette, state.theme == 'dark' ? Brightness.dark : Brightness.light),
+            home: _AppRoot(state: state),
+          );
+        },
       ),
     );
   }
 }
 
-class BlankScreen extends StatelessWidget {
-  const BlankScreen({
-    super.key,
-  });
+/// Hosts the main shell and, once mounted, checks whether to show the
+/// birthday celebration screen and/or an update-available dialog.
+class _AppRoot extends StatefulWidget {
+  final AppState state;
+  const _AppRoot({required this.state});
 
   @override
-  Widget build(BuildContext context) {
-    return const Scaffold(
-      body: SizedBox.shrink(),
-    );
-  }
+  State<_AppRoot> createState() => _AppRootState();
 }
 
-Future<int> getUnusedPort() {
-  return ServerSocket.bind("127.0.0.1", 0).then((socket) {
-    var port = socket.port;
-    socket.close();
-    return port;
-  });
+class _AppRootState extends State<_AppRoot> {
+  bool _checkedBirthday = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_checkedBirthday) {
+      _checkedBirthday = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _maybeShowBirthday());
+    }
+  }
+
+  Future<void> _maybeShowBirthday() async {
+    final db = AppDb.instance;
+    final showPopup = await db.getSetting('show_popup', '1') == '1';
+    if (!showPopup) {
+      _checkUpdate();
+      return;
+    }
+
+    final todays =
+        widget.state.contacts.where((c) => daysUntil(c.day, c.month) == 0).toList();
+    if (todays.isEmpty) {
+      _checkUpdate();
+      return;
+    }
+
+    final remindAllDay = await db.getSetting('remind_all_day', '0') == '1';
+    final todayStr = DateTime.now().toIso8601String().substring(0, 10);
+    final dismissedDate = await db.getSetting('birthday_dismissed_date', '');
+    final alreadyDismissed = dismissedDate == todayStr;
+
+    if (remindAllDay || !alreadyDismissed) {
+      await Future.delayed(const Duration(milliseconds: 400));
+      if (!mounted) return;
+      await Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => BirthdayScreen(todaysContacts: todays)),
+      );
+    }
+    _checkUpdate();
+  }
+
+  void _checkUpdate() {
+    final palette = widget.state.theme == 'dark' ? darkPalette : lightPalette;
+    UpdateChecker.check(context, widget.state.lang, palette);
+  }
+
+  @override
+  Widget build(BuildContext context) => const AppShell();
 }

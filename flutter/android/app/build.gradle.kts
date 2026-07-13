@@ -31,18 +31,6 @@ android {
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
-    packaging {
-        jniLibs {
-            useLegacyPackaging = true
-            keepDebugSymbols += listOf(
-                "*/arm64-v8a/libpython*.so",
-                "*/armeabi-v7a/libpython*.so",
-                "*/x86/libpython*.so",
-                "*/x86_64/libpython*.so",
-            )
-        }
-    }
-
     compileOptions {
         isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
@@ -55,40 +43,21 @@ android {
 
     sourceSets["main"].java.srcDir("src/main/kotlin")
 
-    
-    
-
     defaultConfig {
         applicationId = "com.flet.celebria"
-        val resolvedMinSdk = 24
-        minSdk = resolvedMinSdk
-        val resolvedTargetSdk = 35
-        targetSdk = resolvedTargetSdk
+        minSdk = 24
+        targetSdk = 35
         versionCode = flutterVersionCode
         versionName = flutterVersionName
 
-        println("Gradle build config:")
-        println("  minSdkVersion: $resolvedMinSdk")
-        println("  targetSdkVersion: $resolvedTargetSdk")
-        println("  versionCode: $flutterVersionCode")
-        println("  versionName: $flutterVersionName")
-
-// flet: split_per_abi 
         ndk {
-            
             abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
-            
         }
-// flet: end of split_per_abi 
     }
-
-// flet: android_signing 
 
     buildTypes {
         release {
-// flet: android_signing 
             signingConfig = signingConfigs.getByName("debug")
-// flet: end of android_signing 
         }
     }
 }

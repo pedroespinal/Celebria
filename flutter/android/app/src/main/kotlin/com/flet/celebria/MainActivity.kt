@@ -34,10 +34,11 @@ class MainActivity : FlutterActivity() {
         if (promptedThisSession) return
         promptedThisSession = true
         // Delay so Flutter's own POST_NOTIFICATIONS system prompt (triggered
-        // a moment later from Dart on first launch) gets a chance to resolve
-        // first — otherwise both dialogs could appear stacked on top of
-        // each other on a fresh install.
-        Handler(Looper.getMainLooper()).postDelayed({ checkNotificationsAndPrompt() }, 3000)
+        // a moment later from Dart on first launch, now deferred to after
+        // the first frame — see main.dart) gets a chance to resolve first —
+        // otherwise both dialogs could appear stacked on top of each other
+        // on a fresh install.
+        Handler(Looper.getMainLooper()).postDelayed({ checkNotificationsAndPrompt() }, 5000)
     }
 
     private fun checkNotificationsAndPrompt() {

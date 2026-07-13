@@ -1,12 +1,10 @@
 # ============================================================
 #  Celebria - Script de Release
-#  Uso: .\release.ps1 -Version "1.0.1" -Notes "descripcion"
-#  Usa -SkipTest para saltar la prueba local (ej: cambios menores)
+#  Uso: .\release.ps1 -Version "2.0.0" -Notes "descripcion"
 # ============================================================
 param(
     [Parameter(Mandatory=$true)]  [string]$Version,
-    [Parameter(Mandatory=$true)]  [string]$Notes,
-    [switch]$SkipTest
+    [Parameter(Mandatory=$true)]  [string]$Notes
 )
 
 $ErrorActionPreference = "Continue"   # git warnings no deben abortar el script
@@ -51,8 +49,8 @@ Write-Host "=== Celebria Release $TAG ===" -ForegroundColor Cyan
 function ConvertTo-VersionParts([string]$v) {
     return ($v -split '\.') | ForEach-Object { [int]$_ }
 }
-$currentMatch = Select-String -Path "main.py" -Pattern 'APP_VERSION\s*=\s*"([^"]+)"' | Select-Object -First 1
-if (-not $currentMatch) { Write-Error "No se encontro APP_VERSION en main.py."; exit 1 }
+$currentMatch = Select-String -Path "flutter\lib\core\constants.dart" -Pattern "appVersion\s*=\s*'([^']+)'" | Select-Object -First 1
+if (-not $currentMatch) { Write-Error "No se encontro appVersion en flutter\lib\core\constants.dart."; exit 1 }
 $currentVersion = $currentMatch.Matches[0].Groups[1].Value
 $curParts = ConvertTo-VersionParts $currentVersion
 $newParts = ConvertTo-VersionParts $Version
@@ -64,48 +62,33 @@ for ($i = 0; $i -lt 3; $i++) {
     if ($n -lt $c) { break }
 }
 if (-not $isNewer) {
-    Write-Error "La version '$Version' no es mayor que la version actual ($currentVersion). Cada release debe incrementar la version (versionCode y APK)."
+    Write-Error "La version '$Version' no es mayor que la version actual ($currentVersion). Cada release debe incrementar la version."
     exit 1
 }
 Write-Host "      Version: $currentVersion -> $Version (OK, incrementa)" -ForegroundColor DarkGray
 
-# -- 0. Prueba local antes de compilar ----------------------------------------
-if (-not $SkipTest) {
-    Write-Host ""
-    Write-Host "[0/6] Prueba local..." -ForegroundColor Yellow
-    Write-Host "      Abriendo la app en modo escritorio."
-    Write-Host "      Prueba todo lo que necesites y cierra la ventana al terminar."
-    Write-Host ""
-    $env:PYTHONIOENCODING = "utf-8"
-    $env:PYTHONUTF8       = "1"
-    python main.py
-    Write-Host ""
-    $ok = Read-Host "      Todo bien? Continuar con compile y release? (S/N)"
-    if ($ok -ne "S" -and $ok -ne "s") {
-        Write-Host ""
-        Write-Host "  Release cancelado. Corrige lo necesario y vuelve a intentar." -ForegroundColor Red
-        Write-Host ""
-        exit 0
-    }
-} else {
-    Write-Host "      (prueba omitida con -SkipTest)" -ForegroundColor DarkGray
-}
-
-# -- 1. Actualizar APP_VERSION en main.py -------------------------------------
+# -- 1. Actualizar appVersion en constants.dart -------------------------------
 Write-Host ""
-Write-Host "[1/5] Actualizando APP_VERSION a $Version..."
-$content = Get-Content "main.py" -Raw -Encoding UTF8
-$updated = $content -replace 'APP_VERSION\s*=\s*"[^"]+"', ('APP_VERSION = "' + $Version + '"')
-if ($content -eq $updated) {
-    Write-Host "      (version ya estaba actualizada)"
-} else {
-    [System.IO.File]::WriteAllText("$PWD\main.py", $updated, [System.Text.Encoding]::UTF8)
-    Write-Host "      OK"
-}
+Write-Host "[1/5] Actualizando appVersion a $Version..."
+$constPath = "flutter\lib\core\constants.dart"
+$content = Get-Content $constPath -Raw -Encoding UTF8
+$updated = $content -replace "appVersion\s*=\s*'[^']+'", ("appVersion = '" + $Version + "'")
+[System.IO.File]::WriteAllText("$PWD\$constPath", $updated, [System.Text.Encoding]::UTF8)
+Write-Host "      OK"
 
-# -- 1.5. Actualizar version.json --------------------------------------------
+# -- 1.5. Actualizar version en pubspec.yaml (versionName+versionCode) -------
+$pubspecPath = "flutter\pubspec.yaml"
+$pubspecContent = Get-Content $pubspecPath -Raw -Encoding UTF8
+# versionCode derivado: "2.0.1" -> 20001  |  "2.10.0" -> 21000
+$vParts = $Version.Split('.') | ForEach-Object { [int]$_ }
+$buildNumber = ($vParts[0] * 10000) + ($vParts[1] * 100) + $vParts[2]
+$pubspecUpdated = $pubspecContent -replace 'version:\s*[\d\.\+]+', "version: $Version+$buildNumber"
+[System.IO.File]::WriteAllText("$PWD\$pubspecPath", $pubspecUpdated, [System.Text.Encoding]::UTF8)
+Write-Host "      pubspec.yaml -> $Version+$buildNumber"
+
+# -- 1.6. Actualizar version.json ---------------------------------------------
 Write-Host ""
-Write-Host "[1.5/6] Actualizando version.json..."
+Write-Host "[1.6/6] Actualizando version.json..."
 $vjPath = "$PWD\version.json"
 $vjCurrent = Get-Content $vjPath -Raw -Encoding UTF8 | ConvertFrom-Json
 $vjNew = [ordered]@{
@@ -118,92 +101,34 @@ $vjNew = [ordered]@{
     [System.Text.Encoding]::UTF8)
 Write-Host "      OK  (minimum=$($vjCurrent.minimum))"
 
-# -- 2. Compilar APK (paso 1: Flet genera bundle Python + template Flutter) ---
+# -- 2. Compilar APK -----------------------------------------------------------
 Write-Host ""
-Write-Host "[2/6] Compilando APK (bundle Python + template Flutter)..."
-$env:PYTHONIOENCODING = "utf-8"
-$env:PYTHONUTF8 = "1"
-$env:NO_COLOR = "1"
-chcp 65001 | Out-Null
-flet build apk --artifact "Celebria-$Version" 2>&1 | Out-Null
-# Flet puede fallar en su propio 'flutter build apk' (ej: falta desugaring) pero el
-# bundle Python si se crea antes. Solo abortamos si ese bundle no existe.
-$pythonBundle = "build\flutter\app\app.zip"
-if (-not (Test-Path $pythonBundle)) { Write-Error "Fallo el bundle Python (flet build apk) - app.zip no encontrado."; exit 1 }
-Write-Host "      OK - bundle Python listo"
+Write-Host "[2/6] Compilando APK (flutter build apk --release)..."
 
-# -- 2.5. Recompilar Flutter con codigo de notificaciones push ----------------
-# flet build apk genera su propio main.dart (sin notificaciones) y no incluye
-# los paquetes de flutter/pubspec.yaml. Este paso los inyecta y recompila.
-Write-Host ""
-Write-Host "[2.5/6] Aplicando notificaciones push y recompilando Flutter..."
+# Borrar el APK anterior antes de compilar. Si no se borra, un build fallido
+# reutiliza el APK viejo silenciosamente y se sube una version anterior
+# disfrazada con el numero nuevo.
+$flutterApk = "flutter\build\app\outputs\flutter-apk\app-release.apk"
+Remove-Item $flutterApk -ErrorAction SilentlyContinue
 
-# Copiar archivos Dart personalizados sobre el template de Flet
-Copy-Item "flutter\lib\main.dart"               "build\flutter\lib\main.dart"               -Force
-Copy-Item "flutter\lib\notification_helper.dart" "build\flutter\lib\notification_helper.dart" -Force
-Copy-Item "flutter\android\AndroidManifest.xml"  `
-    "build\flutter\android\app\src\main\AndroidManifest.xml" -Force -ErrorAction SilentlyContinue
-Copy-Item "flutter\android\app\build.gradle.kts" `
-    "build\flutter\android\app\build.gradle.kts" -Force
-
-# Widget de pantalla de inicio — Kotlin + recursos Android
-$ktSrc = "flutter\android\app\src\main\kotlin\com\flet\celebria"
-$ktDst = "build\flutter\android\app\src\main\kotlin\com\flet\celebria"
-New-Item -ItemType Directory -Force $ktDst | Out-Null
-Copy-Item "$ktSrc\BirthdayWidget.kt" "$ktDst\BirthdayWidget.kt" -Force
-Copy-Item "$ktSrc\BootReceiver.kt"   "$ktDst\BootReceiver.kt"   -Force
-Copy-Item "$ktSrc\MainActivity.kt"   "$ktDst\MainActivity.kt"   -Force
-
-$resSrc = "flutter\android\res"
-$resDst = "build\flutter\android\app\src\main\res"
-New-Item -ItemType Directory -Force "$resDst\layout" | Out-Null
-New-Item -ItemType Directory -Force "$resDst\xml"    | Out-Null
-Copy-Item "$resSrc\layout\birthday_widget.xml"      "$resDst\layout\birthday_widget.xml"      -Force
-Copy-Item "$resSrc\xml\birthday_widget_info.xml"    "$resDst\xml\birthday_widget_info.xml"    -Force
-Write-Host "      Widget files copiados"
-
-# Asegurar que los paquetes de notificaciones esten en pubspec.yaml
-# (Flet los borra al regenerar el template)
-$pubspecPath = "$PWD\build\flutter\pubspec.yaml"
-$pubspecContent = Get-Content $pubspecPath -Raw -Encoding UTF8
-if ($pubspecContent -notmatch "flutter_local_notifications") {
-    $toInsert = "  flutter_local_notifications: ^18.0.1`r`n  flutter_timezone: ^3.0.0`r`n  sqflite: ^2.3.3+1`r`n  timezone: ^0.9.4`r`n"
-    $pubspecContent = $pubspecContent -replace "(dependencies:\s*\r?\n)", "`${1}$toInsert"
-    [System.IO.File]::WriteAllText($pubspecPath, $pubspecContent, [System.Text.Encoding]::UTF8)
-    Write-Host "      Paquetes de notificacion agregados a pubspec.yaml"
-}
-
-# Borrar AMBAS ubicaciones posibles del APK antes de compilar.
-# Si no se borran, un build fallido reutiliza el APK viejo silenciosamente
-# y se sube una version anterior disfrazada con el numero nuevo.
-$flutterApk    = "build\flutter\build\app\outputs\apk\release\app-release.apk"
-$flutterApkAlt = "build\flutter\build\app\outputs\flutter-apk\app-release.apk"
-Remove-Item $flutterApk    -ErrorAction SilentlyContinue
-Remove-Item $flutterApkAlt -ErrorAction SilentlyContinue
-
-# Resolver dependencias y compilar APK con el codigo completo
-# SERIOUS_PYTHON_SITE_PACKAGES es requerido por el plugin serious_python de Flutter
-$env:SERIOUS_PYTHON_SITE_PACKAGES = "$PWD\build\site-packages"
-Push-Location "build\flutter"
-$pubGetOut  = flutter pub get 2>&1
-$buildOut   = flutter build apk --release --no-version-check --suppress-analytics 2>&1
+Push-Location "flutter"
+$pubGetOut = flutter pub get 2>&1
+$buildOut  = flutter build apk --release --no-version-check --suppress-analytics 2>&1
 Pop-Location
 
-# Buscar el APK recien compilado
-if (Test-Path $flutterApk)    { <# ruta primaria #> }
-elseif (Test-Path $flutterApkAlt) { $flutterApk = $flutterApkAlt }
-else {
+if (-not (Test-Path $flutterApk)) {
     Write-Host ""
-    Write-Error "Fallo la compilacion Flutter con notificaciones."
+    Write-Error "Fallo la compilacion Flutter."
     Write-Host "--- flutter pub get output ---" -ForegroundColor Red
     $pubGetOut | Write-Host
     Write-Host "--- flutter build apk output ---" -ForegroundColor Red
     $buildOut  | Write-Host
     exit 1
 }
+New-Item -ItemType Directory -Force "build\apk" | Out-Null
 Copy-Item $flutterApk $APK -Force
 $sizeMB = [math]::Round((Get-Item $APK).Length / 1MB, 1)
-Write-Host "      OK - $sizeMB MB (con notificaciones push)"
+Write-Host "      OK - $sizeMB MB"
 
 # REGLA: build\apk siempre debe contener solo el APK mas reciente (sin reguero
 # de versiones viejas). Borra cualquier Celebria-*.apk* que no sea el actual.
@@ -215,7 +140,7 @@ Write-Host "      build\apk limpiado - solo queda Celebria-$Version.apk"
 # -- 3. Commit y tag en git ---------------------------------------------------
 Write-Host ""
 Write-Host "[3/6] Commit y tag git..."
-git add main.py version.json assets/icon.png flutter release.ps1 *>&1 | Out-Null
+git add flutter version.json assets/icon.png release.ps1 make_icon.py *>&1 | Out-Null
 git commit -m "Celebria $TAG - $Notes" *>&1 | Out-Null
 git tag $TAG *>&1 | Out-Null
 git push origin main --tags *>&1 | Out-Null
@@ -255,8 +180,8 @@ $Notes
 ---
 
 ## Requisitos / Requirements
-- Android 5.0 o superior
-- ~70 MB de espacio libre
+- Android 7.0 o superior
+- ~30 MB de espacio libre
 - Sin cuenta requerida — funciona completamente sin internet (excepto para actualizaciones)
 "@
 

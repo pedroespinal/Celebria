@@ -1,50 +1,59 @@
-import 'dart:io';
-
-import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
-import 'package:path/path.dart' as path_pkg;
-import 'package:path_provider/path_provider.dart' as path_provider;
 import 'package:sqflite/sqflite.dart';
 import 'package:timezone/data/latest_all.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
+
+import 'data/db.dart';
 
 class NotificationHelper {
   static final FlutterLocalNotificationsPlugin _notif =
       FlutterLocalNotificationsPlugin();
   static bool _initialized = false;
-  static int _lastHandledTestTrigger = 0;
 
   // ── Public entry point called once at app start ─────────────────────────────
+  //
+  // Each step below is wrapped in its OWN try/catch. Verified on a real
+  // device/emulator: requestNotificationsPermission() can throw a
+  // PlatformException (null Activity reference) on some cold starts. With a
+  // single try/catch around the whole method (the old design), that
+  // exception skipped scheduleFromDB() entirely — notifications were
+  // silently never scheduled, with no visible error to the user. Isolating
+  // each step means a failure in one (permission request, channel creation,
+  // whatever) can never prevent scheduling from running.
   static Future<void> initialize() async {
     if (_initialized) return;
     _initialized = true;
 
+    tz_data.initializeTimeZones();
     try {
-      tz_data.initializeTimeZones();
-      try {
-        final String timeZoneName = await FlutterTimezone.getLocalTimezone();
-        tz.setLocalLocation(tz.getLocation(timeZoneName));
-        debugPrint('[Celebria] Timezone set to: $timeZoneName');
-      } catch (tzErr) {
-        debugPrint('[Celebria] Timezone init failed, using UTC fallback: $tzErr');
-      }
+      final String timeZoneName = await FlutterTimezone.getLocalTimezone();
+      tz.setLocalLocation(tz.getLocation(timeZoneName));
+      print('[Celebria] Timezone set to: $timeZoneName');
+    } catch (tzErr) {
+      print('[Celebria] Timezone init failed, using UTC fallback: $tzErr');
+    }
 
+    try {
       const initSettings = InitializationSettings(
         android: AndroidInitializationSettings('@mipmap/ic_launcher'),
       );
       await _notif.initialize(
         initSettings,
         onDidReceiveNotificationResponse: (NotificationResponse response) {
-          debugPrint('[Celebria] Notification tapped: ${response.id}');
+          print('[Celebria] Notification tapped: ${response.id}');
         },
         onDidReceiveBackgroundNotificationResponse: _onBackgroundNotification,
       );
+    } catch (e) {
+      print('[Celebria] _notif.initialize error: $e');
+    }
 
-      final androidPlugin = _notif
-          .resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>();
+    final androidPlugin = _notif
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
 
+    try {
       await androidPlugin?.createNotificationChannel(
         const AndroidNotificationChannel(
           'celebria_birthdays',
@@ -55,25 +64,33 @@ class NotificationHelper {
           playSound: true,
         ),
       );
-
-      await androidPlugin?.requestNotificationsPermission();
-
-      // Request exact alarm permission (Android 12+).
-      // Opens system settings once so the user can grant it; if already
-      // granted this is a no-op.
-      try {
-        await androidPlugin?.requestExactAlarmsPermission();
-      } catch (_) {}
-
-      await scheduleFromDB();
     } catch (e) {
-      debugPrint('[Celebria] NotificationHelper.initialize error: $e');
+      print('[Celebria] createNotificationChannel error: $e');
     }
+
+    try {
+      await androidPlugin?.requestNotificationsPermission();
+    } catch (e) {
+      print('[Celebria] requestNotificationsPermission error: $e');
+    }
+
+    // Deliberately NOT calling requestExactAlarmsPermission() here.
+    // CONFIRMED via direct device testing: that call immediately launches a
+    // full-screen "Alarms & reminders" Settings page with ZERO user action —
+    // the instant this runs, right after the user grants POST_NOTIFICATIONS,
+    // it yanks them out of the app they just opened with no explanation.
+    // Exact-alarm permission is opt-in only now, via the native "Enable
+    // notifications" dialog in MainActivity.kt (user must explicitly tap
+    // "Abrir configuración" there). Without it, _scheduleNotif() already
+    // falls back to inexactAllowWhileIdle automatically — notifications
+    // still fire, just without the exact-time guarantee.
+
+    await scheduleFromDB();
   }
 
   @pragma('vm:entry-point')
   static void _onBackgroundNotification(NotificationResponse response) {
-    debugPrint('[Celebria] Background notification tapped: ${response.id}');
+    print('[Celebria] Background notification tapped: ${response.id}');
   }
 
   static Future<bool> areNotificationsEnabled() async {
@@ -102,11 +119,14 @@ class NotificationHelper {
   static Future<int> scheduleFromDB() async {
     int scheduled = 0;
     try {
-      final docsDir = await path_provider.getApplicationDocumentsDirectory();
-      final dbPath = path_pkg.join(docsDir.path, 'celebria.db');
-      if (!File(dbPath).existsSync()) return 0;
-
-      final db = await openDatabase(dbPath, readOnly: true);
+      // Shared connection (see AppDb.raw doc comment) — this must NEVER be
+      // closed here. sqflite caches connections by path (singleInstance
+      // defaults to true), so an independent openDatabase() call to this
+      // same file used to return AppDb's own connection under the hood;
+      // closing it after use broke every other DB call in the app for the
+      // rest of the session (confirmed via device testing: Settings screen
+      // hung on its loading spinner forever after this ran once).
+      final db = await AppDb.instance.raw;
 
       final lang         = await _getSetting(db, 'lang',               'es');
       final notifDays    = int.tryParse(await _getSetting(db, 'notif_days',   '0')) ?? 0;
@@ -115,25 +135,11 @@ class NotificationHelper {
       final notifMinute  = int.tryParse(await _getSetting(db, 'notif_minute', '0')) ?? 0;
       final alsoOnDay    = (await _getSetting(db, 'notif_also_day_of', '0')) == '1';
       final summaryOn    = (await _getSetting(db, 'notif_monthly_summary', '1')) == '1';
-      final testTrigger  = int.tryParse(await _getSetting(db, 'notif_test_trigger', '0')) ?? 0;
 
       final contacts = await db.query(
         'contacts',
         columns: ['name', 'day', 'month', 'year'],
       );
-      await db.close();
-
-      // "Send test notification" button in Settings — fires immediately so
-      // we can tell whether Android will display ANY notification for this
-      // app at all, independent of scheduling/timing. Deduped in-memory so
-      // it only fires once per button tap even if this runs again soon.
-      if (testTrigger > 0 && testTrigger != _lastHandledTestTrigger) {
-        final ageMs = DateTime.now().millisecondsSinceEpoch - testTrigger;
-        if (ageMs >= 0 && ageMs < 120000) {
-          _lastHandledTestTrigger = testTrigger;
-          await _fireTestNotification(lang);
-        }
-      }
 
       await _notif.cancelAll();
 
@@ -261,15 +267,18 @@ class NotificationHelper {
         }
       }
 
-      debugPrint('[Celebria] Scheduled $scheduled birthday notification(s).');
+      print('[Celebria] Scheduled $scheduled birthday notification(s).');
     } catch (e) {
-      debugPrint('[Celebria] scheduleFromDB error: $e');
+      print('[Celebria] scheduleFromDB error: $e');
     }
     return scheduled;
   }
 
   // ── Immediate test notification (Settings → "Send test push notification") ─
-  static Future<void> _fireTestNotification(String lang) async {
+  // Public: called directly from the Settings screen. Now that everything is
+  // Dart (no more Python), there's no need for the old DB-flag-plus-resume
+  // polling trick — the UI can just call this straight away.
+  static Future<void> fireTestNotification(String lang) async {
     const details = NotificationDetails(
       android: AndroidNotificationDetails(
         'celebria_birthdays',
@@ -281,15 +290,15 @@ class NotificationHelper {
         enableVibration: true,
       ),
     );
-    final title = lang == 'es' ? '\U0001f514 Notificación de prueba' : '\U0001f514 Test notification';
+    final title = lang == 'es' ? '🔔 Notificación de prueba' : '🔔 Test notification';
     final body  = lang == 'es'
         ? 'Si ves esto, las notificaciones de Celebria funcionan correctamente.'
         : 'If you see this, Celebria notifications are working correctly.';
     try {
       await _notif.show(9999, title, body, details);
-      debugPrint('[Celebria] Test notification fired.');
+      print('[Celebria] Test notification fired.');
     } catch (e) {
-      debugPrint('[Celebria] Test notification failed: $e');
+      print('[Celebria] Test notification failed: $e');
     }
   }
 
@@ -324,7 +333,7 @@ class NotificationHelper {
               UILocalNotificationDateInterpretation.absoluteTime,
         );
       } catch (e) {
-        debugPrint('[Celebria] Could not schedule notif $id: $e');
+        print('[Celebria] Could not schedule notif $id: $e');
       }
     }
   }

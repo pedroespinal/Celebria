@@ -5,7 +5,7 @@
 Celebria es una app Android personal para nunca olvidar un cumpleaños.  
 Paleta Fiesta (teal + coral + dorado), dark y light mode, bilingüe ES/EN, sin publicidad y sin conexión requerida para su uso principal.
 
-[![Versión](https://img.shields.io/badge/versión-1.10.4-ff6b6b?style=flat-square)](https://github.com/pedroespinal/Celebria/releases/latest)
+[![Versión](https://img.shields.io/badge/versión-1.10.5-ff6b6b?style=flat-square)](https://github.com/pedroespinal/Celebria/releases/latest)
 [![Plataforma](https://img.shields.io/badge/plataforma-Android-6bcb77?style=flat-square)](https://github.com/pedroespinal/Celebria/releases/latest)
 [![Flutter](https://img.shields.io/badge/Flutter-Dart-ffd93d?style=flat-square)](https://flutter.dev/)
 
@@ -292,6 +292,18 @@ No requiere recompilar la app.
 - **`version.json` debe ir SIN BOM.** `[Text.Encoding]::UTF8` de PowerShell agrega `EF BB BF` y el `jsonDecode` de Dart lo rechaza: hasta el 2026-11-23 el aviso de actualización fallaba en silencio en todas las versiones. `release.ps1` ya usa `UTF8Encoding($false)` y `UpdateChecker` quita el BOM (desde la versión siguiente a 1.10.0)
 - "Forzar detención" borra todas las alarmas de la app: para probar notificaciones cierra la app con `am kill`, no con `am force-stop`
 - Exportar JSON usa `FilePicker.platform.saveFile(bytes:)`; importar usa `pickFiles(withData: true)`
+
+---
+
+## 🆕 Novedades v1.10.5 (2026-11-24)
+
+- **Diseño más coherente y moderno** (pedido de Pedro):
+  - **Hora del recordatorio** en dos cajas redondeadas iguales a los demás campos (ícono de reloj, números grandes, `:` en el color principal). Antes era un desplegable suelto con una línea debajo
+  - **Botones tonales** (`TonalButton` en `lib/widgets/buttons.dart`): las acciones secundarias usan un relleno suave + borde + texto del color, en vez de bloques sólidos de 5 colores. Un color por grupo en Configuración: cian = notificaciones, amarillo = guía de batería, verde = respaldo/importar, lila = Estadísticas/Manual. El botón sólido queda solo para la acción principal (Guardar, Enviar por WhatsApp, ¡Celebrar!)
+  - En Agregar/Editar: Cancelar y Eliminar pasan a tonales (Eliminar ya no compite con Guardar); en la confirmación, "Sí" sigue sólido rojo
+  - **Decoración única para todos los campos** (`fieldDecoration()`): formulario, hora y mensaje de WhatsApp se ven iguales
+  - **Acerca de** muestra versión e ícono; el pie de Configuración ya no repite "Recordatorio de Cumpleaños" y lleva el crédito como las demás pantallas
+- **FIX Estadísticas**: "Próximo cumpleaños" decía "Sin contactos" cuando el único cumpleaños próximo era HOY; ahora muestra "Nombre — ¡HOY! 🎉". Título en negrita y textos más grandes
 
 ---
 

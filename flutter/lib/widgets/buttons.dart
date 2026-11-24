@@ -42,6 +42,57 @@ class SolidButton extends StatelessWidget {
   }
 }
 
+/// Tonal button — secondary actions (v1.10.5). A soft tint of [color] with a
+/// thin border and colored label: keeps screens calm and leaves the solid
+/// [SolidButton] for the one main action of a screen.
+class TonalButton extends StatelessWidget {
+  final String label;
+  final Color color;
+  final VoidCallback? onPressed;
+  final bool expand;
+
+  const TonalButton(this.label, this.color,
+      {super.key, required this.onPressed, this.expand = true});
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final button = OutlinedButton(
+      onPressed: onPressed,
+      style: OutlinedButton.styleFrom(
+        backgroundColor: color.withValues(alpha: dark ? 0.12 : 0.08),
+        foregroundColor: color,
+        side: BorderSide(color: color.withValues(alpha: dark ? 0.55 : 0.45)),
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Text(label, maxLines: 1, style: const TextStyle(fontWeight: FontWeight.bold)),
+      ),
+    );
+    return expand ? SizedBox(width: double.infinity, child: button) : button;
+  }
+}
+
+/// Shared look for every input box (text fields, dropdowns, time picker):
+/// filled, rounded, thin border, primary color when focused (v1.10.5).
+InputDecoration fieldDecoration(Palette p, {String? hint, Widget? prefixIcon}) => InputDecoration(
+      hintText: hint,
+      hintStyle: TextStyle(color: p.t3),
+      prefixIcon: prefixIcon,
+      filled: true,
+      fillColor: p.bg3,
+      isDense: true,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: p.border)),
+      enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: p.border)),
+      focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: p.cyan, width: 1.5)),
+    );
+
 /// Toggle-style option button (pill, filled when active) — used for
 /// notif-days chips, relation picker, theme/lang toggles, etc.
 class OptionButton extends StatelessWidget {

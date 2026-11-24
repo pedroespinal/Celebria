@@ -52,14 +52,18 @@ class StatsScreen extends StatelessWidget {
       return d >= 8 && d <= 30;
     }).length;
 
-    final upcoming = rows.where((r) => daysUntil(r.day, r.month) > 0).toList()
+    // Includes today: with only today's birthdays it said "No contacts" (v1.10.5 fix).
+    final upcoming = rows.where((r) => daysUntil(r.day, r.month) >= 0).toList()
       ..sort((a, b) => daysUntil(a.day, a.month).compareTo(daysUntil(b.day, b.month)));
     final String nxtTxt;
     final Color nxtCol;
     if (upcoming.isNotEmpty) {
       final nr = upcoming.first;
-      nxtTxt = '${nr.name}  —  ${daysUntil(nr.day, nr.month)} ${t(lang, 'stats_days')}';
-      nxtCol = p.green;
+      final d = daysUntil(nr.day, nr.month);
+      nxtTxt = d == 0
+          ? '${nr.name}  —  ${t(lang, 'today_badge')} 🎉'
+          : '${nr.name}  —  $d ${t(lang, 'stats_days')}';
+      nxtCol = d == 0 ? p.pink : p.green;
     } else {
       nxtTxt = t(lang, 'stats_none');
       nxtCol = p.t3;
@@ -108,7 +112,8 @@ class StatsScreen extends StatelessWidget {
           icon: Icon(Icons.arrow_back, color: p.cyan),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: Text('📊  ${t(lang, 'stats_title')}', style: TextStyle(color: p.cyan)),
+        title: Text('📊  ${t(lang, 'stats_title')}',
+            style: TextStyle(color: p.cyan, fontWeight: FontWeight.bold)),
       ),
       body: SafeArea(
         child: ListView(
@@ -134,8 +139,8 @@ class StatsScreen extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(t(lang, 'stats_next'), style: TextStyle(fontSize: 10, color: p.t3)),
-                    Text(nxtTxt, style: TextStyle(fontSize: 13, color: nxtCol, fontWeight: FontWeight.bold)),
+                    Text(t(lang, 'stats_next'), style: TextStyle(fontSize: 12, color: p.t3)),
+                    Text(nxtTxt, style: TextStyle(fontSize: 15, color: nxtCol, fontWeight: FontWeight.bold)),
                   ],
                 ),
               ),

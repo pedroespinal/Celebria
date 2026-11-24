@@ -6,6 +6,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../core/constants.dart';
 import '../core/i18n.dart';
 import '../core/palette.dart';
 import '../core/vcf_parser.dart';
@@ -312,39 +313,59 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ]),
           const SizedBox(height: 10),
           SectionHeader(t(lang, 'set_notif_hour'), palette: p),
+          // v1.10.5: boxed like every other field (was a bare underlined dropdown).
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              DropdownButton<int>(
-                value: _notifHour,
-                dropdownColor: p.bg2,
-                style: TextStyle(color: p.t1),
-                items: [
-                  for (var h = 0; h < 24; h++)
-                    DropdownMenuItem(value: h, child: Text(h.toString().padLeft(2, '0')))
-                ],
-                onChanged: (v) {
-                  if (v == null) return;
-                  setState(() => _notifHour = v);
-                  _saveAndReschedule('notif_hour', v);
-                  _toast('${t(lang, 'alarm_saved')}  ${v.toString().padLeft(2, '0')}:${_notifMinute.toString().padLeft(2, '0')}');
-                },
+              Expanded(
+                child: DropdownButtonFormField<int>(
+                  key: ValueKey('hour-$_notifHour'),
+                  initialValue: _notifHour,
+                  isExpanded: true,
+                  decoration: fieldDecoration(p,
+                      prefixIcon: Icon(Icons.schedule_rounded, color: p.cyan, size: 20)),
+                  dropdownColor: p.bg3,
+                  borderRadius: BorderRadius.circular(10),
+                  iconEnabledColor: p.cyan,
+                  style: TextStyle(color: p.t1, fontSize: 18, fontWeight: FontWeight.bold),
+                  items: [
+                    for (var h = 0; h < 24; h++)
+                      DropdownMenuItem(value: h, child: Text(h.toString().padLeft(2, '0')))
+                  ],
+                  onChanged: (v) {
+                    if (v == null) return;
+                    setState(() => _notifHour = v);
+                    _saveAndReschedule('notif_hour', v);
+                    _toast('${t(lang, 'alarm_saved')}  ${v.toString().padLeft(2, '0')}:${_notifMinute.toString().padLeft(2, '0')}');
+                  },
+                ),
               ),
-              Text(':', style: TextStyle(fontSize: 24, color: p.t2, fontWeight: FontWeight.bold)),
-              DropdownButton<int>(
-                value: _notifMinute,
-                dropdownColor: p.bg2,
-                style: TextStyle(color: p.t1),
-                items: [
-                  for (var m = 0; m < 60; m++)
-                    DropdownMenuItem(value: m, child: Text(':${m.toString().padLeft(2, '0')}'))
-                ],
-                onChanged: (v) {
-                  if (v == null) return;
-                  setState(() => _notifMinute = v);
-                  _saveAndReschedule('notif_minute', v);
-                  _toast('${t(lang, 'alarm_saved')}  ${_notifHour.toString().padLeft(2, '0')}:${v.toString().padLeft(2, '0')}');
-                },
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child: Text(':',
+                    style: TextStyle(fontSize: 26, color: p.cyan, fontWeight: FontWeight.bold)),
+              ),
+              Expanded(
+                child: DropdownButtonFormField<int>(
+                  key: ValueKey('minute-$_notifMinute'),
+                  initialValue: _notifMinute,
+                  isExpanded: true,
+                  decoration: fieldDecoration(p),
+                  dropdownColor: p.bg3,
+                  borderRadius: BorderRadius.circular(10),
+                  iconEnabledColor: p.cyan,
+                  style: TextStyle(color: p.t1, fontSize: 18, fontWeight: FontWeight.bold),
+                  items: [
+                    for (var m = 0; m < 60; m++)
+                      DropdownMenuItem(value: m, child: Text(m.toString().padLeft(2, '0')))
+                  ],
+                  onChanged: (v) {
+                    if (v == null) return;
+                    setState(() => _notifMinute = v);
+                    _saveAndReschedule('notif_minute', v);
+                    _toast('${t(lang, 'alarm_saved')}  ${_notifHour.toString().padLeft(2, '0')}:${v.toString().padLeft(2, '0')}');
+                  },
+                ),
               ),
             ],
           ),
@@ -405,15 +426,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   _saveAndReschedule('notif_monthly_summary', '0');
                 }),
           ]),
-          const SizedBox(height: 6),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton(
-              onPressed: () => _showBatteryGuide(p, lang),
-              child: Text(t(lang, 'battery_guide_btn'), style: TextStyle(color: p.yellow)),
-            ),
-          ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 14),
+          TonalButton(t(lang, 'battery_guide_btn'), p.yellow,
+              onPressed: () => _showBatteryGuide(p, lang)),
+          const SizedBox(height: 12),
           SectionHeader(t(lang, 'set_popup'), palette: p),
           Row(children: [
             OptionButton(
@@ -495,7 +511,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ]),
           ],
           const SizedBox(height: 12),
-          SolidButton(t(lang, 'test_push_btn'), p.cyan,
+          TonalButton(t(lang, 'test_push_btn'), p.cyan,
               onPressed: () async {
                 final enabled = await NotificationHelper.fireTestNotification(lang);
                 if (!enabled && mounted) _toast(t(lang, 'test_push_disabled'));
@@ -504,15 +520,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
           SectionHeader(t(lang, 'set_backup'), palette: p),
           Row(children: [
             Expanded(
-                child: SolidButton('📤  ${t(lang, 'btn_export')}', p.green,
+                child: TonalButton('📤  ${t(lang, 'btn_export')}', p.green,
                     onPressed: () => _doExport(state, lang))),
             const SizedBox(width: 10),
             Expanded(
-                child: SolidButton('📥  ${t(lang, 'btn_import')}', p.yellow,
+                child: TonalButton('📥  ${t(lang, 'btn_import')}', p.green,
                     onPressed: () => _doImport(state, lang))),
           ]),
           const SizedBox(height: 10),
-          SolidButton('📱  ${t(lang, 'import_vcf_btn')}', p.cyan,
+          TonalButton('📱  ${t(lang, 'import_vcf_btn')}', p.green,
               onPressed: () => _doVcfImport(state, lang, p)),
           const SizedBox(height: 12),
           SectionHeader(t(lang, 'set_autobackup'), palette: p),
@@ -541,7 +557,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               '${t(lang, 'autobackup_last')}: ${_lastBackup != null ? _fmtDate(_lastBackup!) : t(lang, 'autobackup_never')}  ·  ${lang == 'es' ? 'Descargas' : 'Downloads'}/Celebria',
               style: TextStyle(fontSize: 11, color: p.t3)),
           const SizedBox(height: 8),
-          SolidButton(t(lang, 'autobackup_now'), p.purple, onPressed: () async {
+          TonalButton(t(lang, 'autobackup_now'), p.green, onPressed: () async {
             final ok = await BackupService.saveNow();
             final last = await BackupService.lastBackup();
             if (!mounted) return;
@@ -551,30 +567,45 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 10),
           Row(children: [
             Expanded(
-                child: SolidButton('📊  ${t(lang, 'stats_btn')}', p.violet,
+                child: TonalButton('📊  ${t(lang, 'stats_btn')}', p.purple,
                     onPressed: () => Navigator.of(context)
                         .push(MaterialPageRoute(builder: (_) => const StatsScreen())))),
             const SizedBox(width: 10),
             Expanded(
-                child: SolidButton('📖  ${t(lang, 'manual_btn')}', p.purple,
+                child: TonalButton('📖  ${t(lang, 'manual_btn')}', p.purple,
                     onPressed: () => Navigator.of(context)
                         .push(MaterialPageRoute(builder: (_) => const HelpScreen())))),
           ]),
           const SizedBox(height: 12),
           SectionHeader(t(lang, 'about_title'), palette: p),
           Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: p.card, borderRadius: BorderRadius.circular(12)),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+                color: p.card,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: p.border)),
+            child: Row(
               children: [
-                Text('🎂  Celebria', style: TextStyle(color: p.cyan, fontWeight: FontWeight.bold)),
-                Text(t(lang, 'app_sub'), style: TextStyle(fontSize: 11, color: p.t2)),
+                const Text('🎂', style: TextStyle(fontSize: 30)),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Celebria  v$appVersion',
+                          style: TextStyle(color: p.cyan, fontSize: 16, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 2),
+                      Text(t(lang, 'app_sub'), style: TextStyle(fontSize: 13, color: p.t2)),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
-          const SizedBox(height: 12),
-          AppFooter(t(lang, 'app_sub'), palette: p),
+          const SizedBox(height: 16),
+          AppFooter(
+              '${t(lang, 'created_by')}: Pedro Espinal   ·   ${t(lang, 'rights')}',
+              palette: p),
         ],
       ),
     );

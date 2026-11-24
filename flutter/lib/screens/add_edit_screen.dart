@@ -188,19 +188,7 @@ class _AddEditScreenState extends State<AddEditScreen> {
     widget.onDone();
   }
 
-  InputDecoration _dec(Palette p, String hint) => InputDecoration(
-        hintText: hint,
-        hintStyle: TextStyle(color: p.t3),
-        filled: true,
-        fillColor: p.bg3,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: p.border)),
-        enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: p.border)),
-        focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: p.cyan)),
-      );
+  InputDecoration _dec(Palette p, String hint) => fieldDecoration(p, hint: hint);
 
   Widget _fieldLabel(String text, Palette p) => Padding(
         padding: const EdgeInsets.only(bottom: 4),
@@ -403,7 +391,7 @@ class _AddEditScreenState extends State<AddEditScreen> {
           Row(
             children: [
               Expanded(
-                child: SolidButton(t(lang, 'btn_cancel'), p.t3, onPressed: widget.onDone),
+                child: TonalButton(t(lang, 'btn_cancel'), p.t3, onPressed: widget.onDone),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -415,7 +403,7 @@ class _AddEditScreenState extends State<AddEditScreen> {
           if (_editing) ...[
             const SizedBox(height: 10),
             if (!_confirmingDelete)
-              SolidButton('🗑  ${t(lang, 'btn_delete')}', p.red,
+              TonalButton('🗑  ${t(lang, 'btn_delete')}', p.red,
                   onPressed: () => setState(() => _confirmingDelete = true))
             else
               Container(
@@ -430,7 +418,7 @@ class _AddEditScreenState extends State<AddEditScreen> {
                     Row(
                       children: [
                         Expanded(
-                          child: SolidButton(t(lang, 'confirm_no'), p.t3,
+                          child: TonalButton(t(lang, 'confirm_no'), p.t3,
                               onPressed: () => setState(() => _confirmingDelete = false)),
                         ),
                         const SizedBox(width: 8),

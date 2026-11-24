@@ -120,21 +120,12 @@ Future<void> showWishSheet(BuildContext context, Contact c, String lang, Palette
                 minLines: 3,
                 maxLines: 6,
                 style: TextStyle(color: p.t1, fontSize: 13),
-                decoration: InputDecoration(
-                  filled: true,
-                  fillColor: p.bg3,
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: p.border)),
-                  enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: p.border)),
-                  focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: p.cyan)),
-                ),
+                decoration: fieldDecoration(p),
               ),
               const SizedBox(height: 12),
               Row(children: [
                 Expanded(
-                  child: SolidButton('📋  ${t(lang, 'wish_copy')}', p.purple, onPressed: () async {
+                  child: TonalButton('📋  ${t(lang, 'wish_copy')}', p.purple, onPressed: () async {
                     await Clipboard.setData(ClipboardData(text: ctrl.text));
                     if (sheetCtx.mounted) {
                       ScaffoldMessenger.of(sheetCtx)

@@ -5,7 +5,7 @@
 Celebria es una app Android personal para nunca olvidar un cumpleaños.  
 Paleta Fiesta (teal + coral + dorado), dark y light mode, bilingüe ES/EN, sin publicidad y sin conexión requerida para su uso principal.
 
-[![Versión](https://img.shields.io/badge/versión-1.10.2-ff6b6b?style=flat-square)](https://github.com/pedroespinal/Celebria/releases/latest)
+[![Versión](https://img.shields.io/badge/versión-1.10.3-ff6b6b?style=flat-square)](https://github.com/pedroespinal/Celebria/releases/latest)
 [![Plataforma](https://img.shields.io/badge/plataforma-Android-6bcb77?style=flat-square)](https://github.com/pedroespinal/Celebria/releases/latest)
 [![Flutter](https://img.shields.io/badge/Flutter-Dart-ffd93d?style=flat-square)](https://flutter.dev/)
 
@@ -191,18 +191,28 @@ canal `com.flet.celebria/widget` registrado en `MainActivity.configureFlutterEng
 
 Un solo paso — ya no hay empaquetado de Python ni build de dos fases.
 
+**Reglas de compilación:** (1) el APK siempre lleva la versión en el nombre
+(`CelebriaV1.10.2.apk`) y (2) **cada compilación borra todo lo viejo**: solo queda la
+última versión.
+
 ```powershell
 # Requisitos previos:
-# - Flutter SDK en PATH
+# - Flutter SDK (ruta fija en los scripts)
 # - Android SDK con licencias aceptadas
 # - Java 17
 
-$env:PATH = "C:\Users\D0nGibaFok\flutter\3.41.7\bin;" + $env:PATH
-Set-Location "C:\Celebria\flutter"
-flutter build apk --release
-# APK en: flutter\build\app\outputs\flutter-apk\CelebriaV<version>.apk
-#   (copia con la versión en el nombre, hecha por build.gradle.kts; app-release.apk
-#    sigue existiendo porque Flutter lo busca con ese nombre exacto)
+# Recomendado — compila y limpia (no publica):
+Set-Location "C:\Celebria"
+.\build.ps1
+# Resultado (lo ÚNICO que queda):
+#   C:\Celebria\build\apk\CelebriaV<version>.apk
+#   C:\Celebria\flutter\build\app\outputs\flutter-apk\CelebriaV<version>.apk
+
+# También funciona `flutter build apk --release` directo: build.gradle.kts crea las
+# copias CelebriaV<version>.apk y borra APKs de versiones anteriores y app-debug.apk.
+# Solo queda además app-release.apk, que Flutter recrea DESPUÉS de Gradle — build.ps1
+# y release.ps1 lo borran. Si la compilación falla, build.ps1 lo dice (ya no deja un
+# APK viejo que parezca nuevo).
 
 # Pruebas unitarias (fechas, parser .vcf, plan de notificaciones):
 flutter test
@@ -285,8 +295,19 @@ No requiere recompilar la app.
 
 ---
 
+## 🆕 Novedades v1.10.3 (2026-11-23)
+
+- **FIX: pantalla negra al eliminar un contacto** (reportado por Pedro con un contacto que cumplía ese día; reproducido en el emulador). `DetailScreen`, al quedarse sin su contacto, programaba un `Navigator.pop()` por **cada** `build()`; se reconstruía dos veces antes del siguiente frame, así que el segundo `pop()` sacaba también Inicio y Android mostraba todo negro. Ahora usa `closeOwnRoute()` (`lib/widgets/nav.dart`): cierra **solo su propia ruta, una sola vez, y nunca la raíz**
+- El editor se cierra por su propio contexto (`closeOwnRoute(editCtx)`), no "lo que esté arriba"
+- **Doble toque** protegido con `OnceGuard`: Guardar (evita contactos duplicados), Eliminar, "¡Celebrar!" y "Enviar por WhatsApp" (no abre WhatsApp dos veces ni cierra pantallas de más)
+- 4 pruebas nuevas en `test/navigation_test.dart` que reproducen el flujo Inicio → Detalle → Editar → Eliminar (33 en total)
+- Guía de usuario: "Editar o eliminar un contacto" explica que vuelves a Inicio y el doble toque (ES/EN)
+
+---
+
 ## 🆕 Novedades v1.10.2 (2026-11-23)
 
+- **Limpieza automática (regla):** cada compilación (`build.ps1`, `release.ps1` o `flutter build apk --release`) borra APKs de versiones anteriores, `app-debug.apk` y `app-release.apk` (este último solo vía scripts); queda únicamente `CelebriaV<version>.apk`
 - **El APK siempre lleva la versión en el nombre:** `CelebriaV1.10.2.apk`. Mismo nombre en la compilación local (`flutter/build/app/outputs/flutter-apk/` — copia automática de `build.gradle.kts` tras `assembleRelease`), en `build/apk/` de `release.ps1`, en el archivo del release de GitHub y en `download_url` de `version.json`. Antes salía `app-release.apk` (sin versión) y los nombres no coincidían (`Celebria-1.10.1.apk` local vs `Celebria-v1.10.1.apk` en GitHub)
 - Guía de usuario: el paso de descarga muestra el nombre nuevo del archivo (ES/EN)
 

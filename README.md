@@ -5,7 +5,7 @@
 Celebria es una app Android personal para nunca olvidar un cumpleaños.  
 Paleta Fiesta (teal + coral + dorado), dark y light mode, bilingüe ES/EN, sin publicidad y sin conexión requerida para su uso principal.
 
-[![Versión](https://img.shields.io/badge/versión-1.10.3-ff6b6b?style=flat-square)](https://github.com/pedroespinal/Celebria/releases/latest)
+[![Versión](https://img.shields.io/badge/versión-1.10.4-ff6b6b?style=flat-square)](https://github.com/pedroespinal/Celebria/releases/latest)
 [![Plataforma](https://img.shields.io/badge/plataforma-Android-6bcb77?style=flat-square)](https://github.com/pedroespinal/Celebria/releases/latest)
 [![Flutter](https://img.shields.io/badge/Flutter-Dart-ffd93d?style=flat-square)](https://flutter.dev/)
 
@@ -292,6 +292,18 @@ No requiere recompilar la app.
 - **`version.json` debe ir SIN BOM.** `[Text.Encoding]::UTF8` de PowerShell agrega `EF BB BF` y el `jsonDecode` de Dart lo rechaza: hasta el 2026-11-23 el aviso de actualización fallaba en silencio en todas las versiones. `release.ps1` ya usa `UTF8Encoding($false)` y `UpdateChecker` quita el BOM (desde la versión siguiente a 1.10.0)
 - "Forzar detención" borra todas las alarmas de la app: para probar notificaciones cierra la app con `am kill`, no con `am force-stop`
 - Exportar JSON usa `FilePicker.platform.saveFile(bytes:)`; importar usa `pickFiles(withData: true)`
+
+---
+
+## 🆕 Novedades v1.10.4 (2026-11-24)
+
+- **Al tocar el aviso del mismo día sale primero la celebración** (idea de Pedro): pantalla de confeti solo con esa persona → "¡Celebrar!" → su detalle. Los avisos anticipados ("en 7 días") siguen abriendo directo el detalle (idea de regalo)
+- Los avisos del día llevan el payload `contact:<id>:today`; los anticipados siguen con `contact:<id>` (los avisos ya programados por versiones anteriores siguen funcionando)
+- Sale **una vez al día** (`notif_popup_date`): los repetidos de "Recordar todo el día" van directo al detalle. Respeta "Mostrar popup" desactivado en Configuración
+- **Paleta nueva 🌌 Aurora (predeterminada)**, elegida por Pedro: neón más suave y legible en modo oscuro (cian `#7DF3FF` y lila `#C8B3FF` sobre azul noche `#0E1222`, con tarjetas y campos algo más claros para que se distingan) + modo claro frío a juego. Tropical, Cyber y Fiesta siguen disponibles en Configuración → Paleta de colores
+- **Etiquetas más grandes**: los títulos de los campos del formulario y de Estadísticas pasan de 11 a 13 px, y los botones de opción de 11 a 12 px
+- **FIX: palabras subrayadas en amarillo al editar un contacto**: la pantalla Editar se abría sin `Material` debajo y Flutter pintaba cada texto con su estilo de error (doble subrayado amarillo). Ahora tiene su propio `Scaffold` con barra superior (← ✏ Editar)
+- Prueba nueva en `test/features_test.dart` (36 en total). Guía ES/EN actualizada
 
 ---
 

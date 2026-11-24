@@ -66,6 +66,27 @@ flutter {
     source = "../.."
 }
 
+// Every release APK also gets a copy named with the version, e.g.
+// build/app/outputs/flutter-apk/CelebriaV1.10.2.apk (Pedro's rule: the .apk
+// must say which version it is). The original app-release.apk is kept as-is
+// because the Flutter tool looks for that exact name after Gradle finishes.
+// Older CelebriaV*.apk copies are removed so only the current one remains.
+tasks.matching { it.name == "assembleRelease" }.configureEach {
+    doLast {
+        val apkDir = layout.buildDirectory.dir("outputs/apk/release").get().asFile
+        val src = File(apkDir, "app-release.apk")
+        if (src.exists()) {
+            val outDir = layout.buildDirectory.dir("outputs/flutter-apk").get().asFile
+            outDir.mkdirs()
+            val name = "CelebriaV$flutterVersionName.apk"
+            outDir.listFiles { f -> f.name.startsWith("CelebriaV") && f.name.endsWith(".apk") && f.name != name }
+                ?.forEach { it.delete() }
+            src.copyTo(File(outDir, name), overwrite = true)
+            println("Versioned APK: ${File(outDir, name).absolutePath}")
+        }
+    }
+}
+
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }

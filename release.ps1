@@ -40,7 +40,9 @@ $TOKEN = $cred[1]
 $HDRS  = @{ Authorization = "token $TOKEN"; Accept = "application/vnd.github+json" }
 $REPO  = "pedroespinal/Celebria"
 $TAG   = "v$Version"
-$APK   = "C:\Celebria\build\apk\Celebria-$Version.apk"
+# REGLA: el .apk siempre lleva la version en el nombre: CelebriaV<version>.apk
+$APK_NAME = "CelebriaV$Version.apk"
+$APK   = "C:\Celebria\build\apk\$APK_NAME"
 
 Write-Host ""
 Write-Host "=== Celebria Release $TAG ===" -ForegroundColor Cyan
@@ -104,7 +106,7 @@ $vjCurrent = Get-Content $vjPath -Raw -Encoding UTF8 | ConvertFrom-Json
 $vjNew = [ordered]@{
     latest       = $Version
     minimum      = $vjCurrent.minimum   # se edita manualmente cuando se quiere forzar
-    download_url = "https://github.com/pedroespinal/Celebria/releases/download/$TAG/Celebria-$TAG.apk"
+    download_url = "https://github.com/pedroespinal/Celebria/releases/download/$TAG/$APK_NAME"
 }
 # SIN BOM: [Text.Encoding]::UTF8 escribe un BOM (EF BB BF) al inicio y el
 # jsonDecode de Dart falla con el ("Unexpected character"), asi que la app
@@ -144,11 +146,12 @@ $sizeMB = [math]::Round((Get-Item $APK).Length / 1MB, 1)
 Write-Host "      OK - $sizeMB MB"
 
 # REGLA: build\apk siempre debe contener solo el APK mas reciente (sin reguero
-# de versiones viejas). Borra cualquier Celebria-*.apk* que no sea el actual.
-Get-ChildItem "build\apk" -Filter "Celebria-*.apk*" -ErrorAction SilentlyContinue |
+# de versiones viejas). Borra cualquier Celebria*.apk* que no sea el actual
+# (incluye el formato viejo Celebria-1.x.x.apk).
+Get-ChildItem "build\apk" -Filter "Celebria*.apk*" -ErrorAction SilentlyContinue |
     Where-Object { $_.Name -ne (Split-Path $APK -Leaf) } |
     Remove-Item -Force
-Write-Host "      build\apk limpiado - solo queda Celebria-$Version.apk"
+Write-Host "      build\apk limpiado - solo queda $APK_NAME"
 
 # -- 3. Commit y tag en git ---------------------------------------------------
 Write-Host ""
@@ -173,7 +176,7 @@ $Notes
 
 > **Android no permite instalar apps fuera de la Play Store por defecto — es normal y seguro seguir estos pasos.**
 
-1. Descarga el archivo **Celebria-$TAG.apk** (boton verde arriba 👆)
+1. Descarga el archivo **$APK_NAME** (boton verde arriba 👆)
 2. Cuando Chrome termine de descargar, toca **Abrir**
 3. Si Android muestra *"No se permite instalar de esta fuente"*:
    - Toca **Configuracion** en ese aviso
@@ -225,7 +228,7 @@ try {
 # -- 5. Subir APK -------------------------------------------------------------
 Write-Host ""
 Write-Host "[5/6] Subiendo APK ($sizeMB MB) a GitHub..."
-$uploadUrl = "https://uploads.github.com/repos/$REPO/releases/$($rel.id)/assets?name=Celebria-$TAG.apk"
+$uploadUrl = "https://uploads.github.com/repos/$REPO/releases/$($rel.id)/assets?name=$APK_NAME"
 $apkBytes  = [System.IO.File]::ReadAllBytes($APK)
 $assetResp = Invoke-WebRequest -Uri $uploadUrl -Method POST -Headers $HDRS `
     -Body $apkBytes -ContentType "application/vnd.android.package-archive" `

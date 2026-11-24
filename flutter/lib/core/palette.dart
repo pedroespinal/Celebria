@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 /// Celebria color system — v1.10.0.
 ///
 /// Three palette families, each with a neon DARK mode and a soft LIGHT mode:
-///   • tropical (default) — mint + magenta on deep teal / soft mint paper
+///   • aurora (default) — soft cyan + lilac on navy / cool paper
+///   • tropical           — mint + magenta on deep teal / soft mint paper
 ///   • cyber              — Pedro's signature cyan/pink/purple on #07071A
 ///   • fiesta             — electric pink on plum / warm sand paper
 ///
@@ -88,6 +89,28 @@ Palette _build(String family, bool dark, Map<String, String> r) => Palette(
     );
 
 const _raw = <String, Map<String, Map<String, String>>>{
+  // v1.10.4 (chosen by Pedro): softer neon for legibility — slightly lighter,
+  // less saturated accents on raised navy surfaces; lilac field labels.
+  'aurora': {
+    'dark': {
+      'bg': '#0E1222', 'bg2': '#121730', 'bg3': '#1E2542', 'card': '#161B31', 'border': '#36406A',
+      'cyan': '#7DF3FF', 'cyandim': '#173A48',
+      'purple': '#C8B3FF', 'purpledim': '#2C2550', 'violet': '#B69CFF',
+      'pink': '#FF8FD6', 'pinkdim': '#4A1F45',
+      'green': '#7DFFB2', 'greendim': '#173D2C',
+      'yellow': '#FFE27A', 'red': '#FF7A8F',
+      't1': '#F4F6FF', 't2': '#C9B8FF', 't3': '#AAB2D4',
+    },
+    'light': {
+      'bg': '#F4F6FC', 'bg2': '#EAEEF8', 'bg3': '#E6EBF7', 'card': '#FFFFFF', 'border': '#D5DCEE',
+      'cyan': '#0E6F86', 'cyandim': '#D6F0F6',
+      'purple': '#5B45D6', 'purpledim': '#E6E1FB', 'violet': '#6D4FD8',
+      'pink': '#B4237F', 'pinkdim': '#F8DDEE',
+      'green': '#127A4B', 'greendim': '#D8F0E3',
+      'yellow': '#8A5300', 'red': '#C81E3A',
+      't1': '#1A1F36', 't2': '#5B3FC4', 't3': '#5F6788',
+    },
+  },
   'tropical': {
     'dark': {
       'bg': '#03121A', 'bg2': '#061A24', 'bg3': '#0A2330', 'card': '#071B25', 'border': '#124050',
@@ -150,8 +173,8 @@ const _raw = <String, Map<String, Map<String, String>>>{
   },
 };
 
-const List<String> paletteFamilies = ['tropical', 'cyber', 'fiesta'];
-const String defaultPaletteFamily = 'tropical';
+const List<String> paletteFamilies = ['aurora', 'tropical', 'cyber', 'fiesta'];
+const String defaultPaletteFamily = 'aurora';
 
 final Map<String, Palette> _cache = {
   for (final f in paletteFamilies)

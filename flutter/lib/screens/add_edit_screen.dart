@@ -204,7 +204,7 @@ class _AddEditScreenState extends State<AddEditScreen> {
 
   Widget _fieldLabel(String text, Palette p) => Padding(
         padding: const EdgeInsets.only(bottom: 4),
-        child: Text(text, style: TextStyle(fontSize: 11, color: p.t2, fontWeight: FontWeight.bold)),
+        child: Text(text, style: TextStyle(fontSize: 13, color: p.t2, fontWeight: FontWeight.bold)),
       );
 
   @override
@@ -214,9 +214,7 @@ class _AddEditScreenState extends State<AddEditScreen> {
     final lang = state.lang;
     final currentYear = DateTime.now().year;
 
-    return Container(
-      color: p.bg,
-      child: ListView(
+    final form = ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
         children: [
           _fieldLabel(t(lang, 'field_kind'), p),
@@ -451,7 +449,27 @@ class _AddEditScreenState extends State<AddEditScreen> {
               '${t(lang, 'created_by')}: Pedro Espinal   ·   ${t(lang, 'rights')}',
               palette: p),
         ],
-      ),
     );
+
+    // Editing is pushed as its own route (from Detail), so it needs its own
+    // Scaffold: without a Material ancestor Flutter draws every label with the
+    // yellow double-underline debug style (v1.10.4 fix). The Add tab already
+    // lives inside AppShell's Scaffold.
+    if (widget.existing != null) {
+      return Scaffold(
+        backgroundColor: p.bg,
+        appBar: AppBar(
+          backgroundColor: p.bg2,
+          leading: IconButton(
+            icon: Icon(Icons.arrow_back, color: p.cyan),
+            onPressed: () => Navigator.of(context).maybePop(),
+          ),
+          title: Text('✏  ${t(lang, 'btn_edit')}',
+              style: TextStyle(color: p.cyan, fontWeight: FontWeight.bold)),
+        ),
+        body: SafeArea(child: form),
+      );
+    }
+    return Material(color: p.bg, child: form);
   }
 }

@@ -18,8 +18,8 @@ double _contrast(Color a, Color b) {
 
 void main() {
   group('palettes', () {
-    test('tropical is the default and unknown families fall back to it', () {
-      expect(paletteFor('nope', 'dark').family, 'tropical');
+    test('aurora is the default and unknown families fall back to it', () {
+      expect(paletteFor('nope', 'dark').family, 'aurora');
       expect(paletteFor('cyber', 'light').isDark, isFalse);
     });
 
@@ -57,8 +57,21 @@ void main() {
 
     test('payload points to the contact; monthly summary to the month', () {
       final plan = NotificationHelper.buildPlan([row(7, 'Ana', 1, 12)], const NotifSettings(), now);
-      expect(plan.where((n) => n.title.contains('Ana')).every((n) => n.payload == 'contact:7'), isTrue);
+      // Default settings = day-of only → ':today' (tap shows the celebration).
+      expect(plan.where((n) => n.title.contains('Ana')).every((n) => n.payload == 'contact:7:today'), isTrue);
       expect(plan.firstWhere((n) => n.title.startsWith('📅')).payload, 'month:12');
+    });
+
+    test('v1.10.4: advance notices open the contact, day-of ones the celebration', () {
+      final plan = NotificationHelper.buildPlan([row(7, 'Ana', 10, 12)],
+          const NotifSettings(notifDays: 7, alsoOnDay: true, remindAllDay: true, remindInterval: 120), now);
+      final ana = plan.where((n) => n.title.contains('Ana')).toList();
+      final dayOf = ana.where((n) => n.when.day == 10 && n.when.month == 12).toList();
+      final before = ana.where((n) => n.when.day == 3 && n.when.month == 12).toList();
+      expect(before, isNotEmpty);
+      expect(before.every((n) => n.payload == 'contact:7'), isTrue);
+      expect(dayOf.length, greaterThan(1), reason: 'remind-all-day repeats');
+      expect(dayOf.every((n) => n.payload == 'contact:7:today'), isTrue);
     });
 
     test('gift idea appears in advance notices only', () {

@@ -88,7 +88,7 @@ class OptionButton extends StatelessWidget {
             textAlign: TextAlign.center,
             maxLines: 1,
             style: TextStyle(
-              fontSize: 11,
+              fontSize: 12,
               color: active ? palette.cyan : palette.t3,
               fontWeight: FontWeight.bold,
             ),

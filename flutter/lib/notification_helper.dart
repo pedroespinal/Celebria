@@ -112,7 +112,8 @@ class NotificationHelper {
   }
 
   /// Set by main.dart: opens the contact a tapped notification is about.
-  /// Payloads: `contact:<id>` (per-contact reminders) or `month:<m>`.
+  /// Payloads: `contact:<id>` (advance reminders), `contact:<id>:today`
+  /// (day-of reminders) or `month:<m>`.
   static void Function(String payload)? onTap;
   static String? _pendingPayload;
 
@@ -271,6 +272,8 @@ class NotificationHelper {
       final gift      = ((row['gift_note'] as String?) ?? '').trim();
       final id        = row['id'] as int?;
       final payload   = id != null ? 'contact:$id' : null;
+      // Day-of reminders carry ':today' so a tap shows the celebration first.
+      final payloadToday = id != null ? 'contact:$id:today' : null;
       if (name.isEmpty || month < 1 || month > 12 || day < 1 || day > 31) continue;
 
       for (int yearOffset = 0; yearOffset <= 1; yearOffset++) {
@@ -297,7 +300,7 @@ class NotificationHelper {
         if (s.notifDays > 0) {
           add(at(birthday.subtract(Duration(days: s.notifDays))), title(s.notifDays), bodyBefore, payload);
         }
-        if (dayOfWanted) add(at(birthday), title(0), bodyDayOf, payload);
+        if (dayOfWanted) add(at(birthday), title(0), bodyDayOf, payloadToday);
         if (s.notifDays2 > 0 && s.notifDays2 != s.notifDays) {
           add(at(birthday.subtract(Duration(days: s.notifDays2))), title(s.notifDays2), bodyBefore, payload);
         }
@@ -306,7 +309,7 @@ class NotificationHelper {
           for (var k = 1;; k++) {
             final when = at(birthday, s.remindInterval * k);
             if (!when.isBefore(endOfDay)) break;
-            add(when, title(0), bodyDayOf, payload);
+            add(when, title(0), bodyDayOf, payloadToday);
           }
         }
       }

@@ -147,7 +147,7 @@ class StatsScreen extends StatelessWidget {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(t(lang, 'stats_by_rel'), style: TextStyle(fontSize: 11, color: p.t2, fontWeight: FontWeight.bold)),
+                Text(t(lang, 'stats_by_rel'), style: TextStyle(fontSize: 13, color: p.t2, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
                 for (final rk in ['family', 'friend', 'work', 'other'])
                   if ((relCount[rk] ?? 0) > 0)
@@ -185,7 +185,7 @@ class StatsScreen extends StatelessWidget {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(t(lang, 'stats_by_month'), style: TextStyle(fontSize: 11, color: p.t2, fontWeight: FontWeight.bold)),
+                Text(t(lang, 'stats_by_month'), style: TextStyle(fontSize: 13, color: p.t2, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -230,7 +230,7 @@ class StatsScreen extends StatelessWidget {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(t(lang, 'zodiac_title'), style: TextStyle(fontSize: 11, color: p.t2, fontWeight: FontWeight.bold)),
+                Text(t(lang, 'zodiac_title'), style: TextStyle(fontSize: 13, color: p.t2, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
                 if (zodiacCount.isEmpty)
                   Text(t(lang, 'stats_none'), style: TextStyle(fontSize: 11, color: p.t3))
@@ -271,7 +271,7 @@ class StatsScreen extends StatelessWidget {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(t(lang, 'stats_milestones'), style: TextStyle(fontSize: 11, color: p.t2, fontWeight: FontWeight.bold)),
+                Text(t(lang, 'stats_milestones'), style: TextStyle(fontSize: 13, color: p.t2, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
                 if (milestoneRows.isEmpty)
                   Text(t(lang, 'stats_no_milestones'), style: TextStyle(fontSize: 11, color: p.t3))

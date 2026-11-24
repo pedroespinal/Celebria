@@ -112,15 +112,36 @@ class _AppRootState extends State<_AppRoot> {
   String? _lastPayload;
   DateTime _lastPayloadAt = DateTime(2000);
 
-  void _openPayload(String payload) {
+  Future<void> _openPayload(String payload) async {
     if (!payload.startsWith('contact:')) return;
     // The same tap can arrive twice (tap callback + launch details).
     final now = DateTime.now();
     if (payload == _lastPayload && now.difference(_lastPayloadAt).inSeconds < 5) return;
     _lastPayload = payload;
     _lastPayloadAt = now;
-    final id = int.tryParse(payload.substring(8));
-    if (id == null || !widget.state.contacts.any((c) => c.id == id)) return;
+    final parts = payload.split(':');
+    final id = parts.length > 1 ? int.tryParse(parts[1]) : null;
+    final contact =
+        widget.state.contacts.where((c) => c.id == id).firstOrNull;
+    if (id == null || contact == null) return;
+
+    // v1.10.4: a day-of reminder shows the celebration (only this contact)
+    // before the contact — once per day, and only if the popup is enabled.
+    if (parts.length > 2 && parts[2] == 'today' &&
+        daysUntil(contact.day, contact.month) == 0) {
+      final db = AppDb.instance;
+      final today = DateTime.now().toIso8601String().substring(0, 10);
+      final showPopup = await db.getSetting('show_popup', '1') == '1';
+      final seen = await db.getSetting('notif_popup_date', '') == today;
+      if (showPopup && !seen) {
+        await db.setSetting('notif_popup_date', today);
+        await navigatorKey.currentState?.push(
+          MaterialPageRoute(
+              builder: (_) => BirthdayScreen(todaysContacts: [contact])),
+        );
+        if (!mounted) return;
+      }
+    }
     navigatorKey.currentState?.push(
       MaterialPageRoute(builder: (_) => DetailScreen(contactId: id)),
     );

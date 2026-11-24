@@ -7,6 +7,7 @@ import '../core/palette.dart';
 import '../models/contact.dart';
 import '../state/app_state.dart';
 import '../widgets/avatar.dart';
+import '../widgets/nav.dart';
 import '../widgets/wish_sheet.dart';
 import 'add_edit_screen.dart';
 
@@ -42,8 +43,12 @@ class DetailScreen extends StatelessWidget {
     }
 
     if (c == null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => Navigator.of(context).pop());
-      return const Scaffold(body: SizedBox.shrink());
+      // Contact was deleted (from its edit screen, an import, etc.): close
+      // THIS screen only. build() can run more than once before the frame
+      // callback fires; a plain pop() per build used to also pop Home and
+      // leave a black screen (v1.10.2 bug, reproduced on the emulator).
+      WidgetsBinding.instance.addPostFrameCallback((_) => closeOwnRoute(context));
+      return Scaffold(backgroundColor: p.bg, body: const SizedBox.shrink());
     }
 
     final dLeft = daysUntil(c.day, c.month);
@@ -85,9 +90,11 @@ class DetailScreen extends StatelessWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) => AddEditScreen(
+              // onDone closes the EDIT route itself (by its own context), not
+              // "whatever is on top" — safe even if called twice.
+              builder: (editCtx) => AddEditScreen(
                 existing: c,
-                onDone: () => Navigator.of(context).pop(),
+                onDone: () => closeOwnRoute(editCtx),
               ),
             )),
             child: Text('✏  ${t(lang, 'btn_edit')}', style: TextStyle(color: p.purple)),

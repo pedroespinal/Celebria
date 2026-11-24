@@ -152,6 +152,11 @@ Get-ChildItem "build\apk" -Filter "Celebria*.apk*" -ErrorAction SilentlyContinue
     Where-Object { $_.Name -ne (Split-Path $APK -Leaf) } |
     Remove-Item -Force
 Write-Host "      build\apk limpiado - solo queda $APK_NAME"
+# REGLA: cada compilacion borra todo lo viejo. app-release.apk (lo recrea
+# Flutter tras Gradle) y app-debug.apk ya no hacen falta: solo queda
+# CelebriaV<version>.apk tambien en flutter-apk.
+Get-ChildItem "flutter\build\app\outputs\flutter-apk" -File -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -ne $APK_NAME } | Remove-Item -Force
 
 # -- 3. Commit y tag en git ---------------------------------------------------
 Write-Host ""

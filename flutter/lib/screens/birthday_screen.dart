@@ -12,6 +12,7 @@ import '../models/contact.dart';
 import '../services/sound_player.dart';
 import '../state/app_state.dart';
 import '../widgets/avatar.dart';
+import '../widgets/nav.dart';
 import '../widgets/wish_sheet.dart';
 
 /// Full-screen celebration — shown automatically when the app opens on
@@ -25,9 +26,12 @@ class BirthdayScreen extends StatefulWidget {
   State<BirthdayScreen> createState() => _BirthdayScreenState();
 }
 
-class _BirthdayScreenState extends State<BirthdayScreen> with SingleTickerProviderStateMixin {
-  late final AnimationController _anim =
-      AnimationController(vsync: this, duration: const Duration(seconds: 6))..repeat();
+class _BirthdayScreenState extends State<BirthdayScreen>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _anim = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 6),
+  )..repeat();
   final List<_Particle> _particles = [];
 
   @override
@@ -36,16 +40,18 @@ class _BirthdayScreenState extends State<BirthdayScreen> with SingleTickerProvid
     SoundPlayer.playBirthdayChime();
     final rnd = math.Random();
     for (var i = 0; i < 90; i++) {
-      _particles.add(_Particle(
-        x: rnd.nextDouble(),
-        phase: rnd.nextDouble(),
-        speed: 0.6 + rnd.nextDouble() * 0.9,
-        size: 5 + rnd.nextDouble() * 7,
-        sway: 0.01 + rnd.nextDouble() * 0.04,
-        spin: (rnd.nextDouble() - 0.5) * 12,
-        colorIndex: rnd.nextInt(5),
-        round: rnd.nextBool(),
-      ));
+      _particles.add(
+        _Particle(
+          x: rnd.nextDouble(),
+          phase: rnd.nextDouble(),
+          speed: 0.6 + rnd.nextDouble() * 0.9,
+          size: 5 + rnd.nextDouble() * 7,
+          sway: 0.01 + rnd.nextDouble() * 0.04,
+          spin: (rnd.nextDouble() - 0.5) * 12,
+          colorIndex: rnd.nextInt(5),
+          round: rnd.nextBool(),
+        ),
+      );
     }
   }
 
@@ -55,14 +61,20 @@ class _BirthdayScreenState extends State<BirthdayScreen> with SingleTickerProvid
     super.dispose();
   }
 
-  Future<void> _celebrate(BuildContext context) async {
-    final remindAllDay = await AppDb.instance.getSetting('remind_all_day', '0') == '1';
+  final _guard = OnceGuard();
+
+  Future<void> _celebrate(BuildContext context) => _guard.run(() async {
+    final remindAllDay =
+        await AppDb.instance.getSetting('remind_all_day', '0') == '1';
     if (!remindAllDay) {
       await AppDb.instance.setSetting(
-          'birthday_dismissed_date', DateTime.now().toIso8601String().substring(0, 10));
+        'birthday_dismissed_date',
+        DateTime.now().toIso8601String().substring(0, 10),
+      );
     }
-    if (context.mounted) Navigator.of(context).pop();
-  }
+    // Only this screen: a double tap used to pop Home too (black screen).
+    if (context.mounted) closeOwnRoute(context);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -95,23 +107,38 @@ class _BirthdayScreenState extends State<BirthdayScreen> with SingleTickerProvid
                       padding: const EdgeInsets.fromLTRB(20, 36, 20, 20),
                       child: Column(
                         children: [
-                          Text(allBirthdays ? '🎂' : '🎉',
-                              style: const TextStyle(fontSize: 88), textAlign: TextAlign.center),
+                          Text(
+                            allBirthdays ? '🎂' : '🎉',
+                            style: const TextStyle(fontSize: 88),
+                            textAlign: TextAlign.center,
+                          ),
                           const SizedBox(height: 12),
-                          Text(allBirthdays ? t(lang, 'popup_title') : t(lang, 'special_day_title'),
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 28,
-                                color: p.pink,
-                                fontWeight: FontWeight.bold,
-                                shadows: p.isDark
-                                    ? [Shadow(color: p.pink.withValues(alpha: 0.8), blurRadius: 18)]
-                                    : null,
-                              )),
+                          Text(
+                            allBirthdays
+                                ? t(lang, 'popup_title')
+                                : t(lang, 'special_day_title'),
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 28,
+                              color: p.pink,
+                              fontWeight: FontWeight.bold,
+                              shadows: p.isDark
+                                  ? [
+                                      Shadow(
+                                        color: p.pink.withValues(alpha: 0.8),
+                                        blurRadius: 18,
+                                      ),
+                                    ]
+                                  : null,
+                            ),
+                          ),
                           if (allBirthdays) ...[
                             const SizedBox(height: 12),
-                            Text(t(lang, 'birthday_screen_sub'),
-                                textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: p.t2)),
+                            Text(
+                              t(lang, 'birthday_screen_sub'),
+                              textAlign: TextAlign.center,
+                              style: TextStyle(fontSize: 13, color: p.t2),
+                            ),
                           ],
                           const SizedBox(height: 20),
                           for (final c in widget.todaysContacts) ...[
@@ -123,11 +150,16 @@ class _BirthdayScreenState extends State<BirthdayScreen> with SingleTickerProvid
                     ),
                   ),
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 32,
+                      vertical: 16,
+                    ),
                     child: Container(
                       width: double.infinity,
                       decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(12), boxShadow: p.glow(p.pink)),
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: p.glow(p.pink),
+                      ),
                       child: ElevatedButton(
                         onPressed: () => _celebrate(context),
                         style: ElevatedButton.styleFrom(
@@ -135,10 +167,14 @@ class _BirthdayScreenState extends State<BirthdayScreen> with SingleTickerProvid
                           foregroundColor: onColor(p.pink),
                           elevation: 0,
                           padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
-                        child: Text('🎉  ${t(lang, 'popup_close')}',
-                            style: const TextStyle(fontWeight: FontWeight.bold)),
+                        child: Text(
+                          '🎉  ${t(lang, 'popup_close')}',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
                       ),
                     ),
                   ),
@@ -153,16 +189,21 @@ class _BirthdayScreenState extends State<BirthdayScreen> with SingleTickerProvid
 
   Widget _card(Contact c, Palette p, String lang) {
     final age = calcAge(c.day, c.month, c.year);
-    final isMilestone = c.isBirthday && age != null && milestoneAges.contains(age);
+    final isMilestone =
+        c.isBirthday && age != null && milestoneAges.contains(age);
     final accent = isMilestone ? p.yellow : p.cyan;
 
     final String line;
     if (c.kind == 'anniversary') {
-      line = '💍 ${t(lang, 'anniv_line')}${age != null && age > 0 ? ' · $age ${t(lang, 'years_anniv')}' : ''}';
+      line =
+          '💍 ${t(lang, 'anniv_line')}${age != null && age > 0 ? ' · $age ${t(lang, 'years_anniv')}' : ''}';
     } else if (c.kind == 'other') {
-      line = '⭐ ${t(lang, 'other_line')}${age != null && age > 0 ? ' · $age ${t(lang, 'years_other')}' : ''}';
+      line =
+          '⭐ ${t(lang, 'other_line')}${age != null && age > 0 ? ' · $age ${t(lang, 'years_other')}' : ''}';
     } else {
-      line = age != null ? '${t(lang, 'popup_turns')} $age ${t(lang, 'popup_years')} 🎂' : '🎂';
+      line = age != null
+          ? '${t(lang, 'popup_turns')} $age ${t(lang, 'popup_years')} 🎂'
+          : '🎂';
     }
 
     return Container(
@@ -178,20 +219,41 @@ class _BirthdayScreenState extends State<BirthdayScreen> with SingleTickerProvid
         mainAxisSize: MainAxisSize.min,
         children: [
           ContactAvatar(
-              photo: c.photo, name: c.name, relation: c.relation, palette: p, size: 72, celebrating: true),
+            photo: c.photo,
+            name: c.name,
+            relation: c.relation,
+            palette: p,
+            size: 72,
+            celebrating: true,
+          ),
           const SizedBox(height: 10),
-          Text(c.name,
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 18, color: accent, fontWeight: FontWeight.bold)),
-          Text(line, textAlign: TextAlign.center, style: TextStyle(fontSize: 14, color: p.t1)),
+          Text(
+            c.name,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 18,
+              color: accent,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          Text(
+            line,
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 14, color: p.t1),
+          ),
           if (isMilestone)
-            Text('✨ ${t(lang, 'milestone_popup')}',
-                textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: p.yellow)),
+            Text(
+              '✨ ${t(lang, 'milestone_popup')}',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 13, color: p.yellow),
+            ),
           const SizedBox(height: 6),
           TextButton(
             onPressed: () => showWishSheet(context, c, lang, p),
-            child: Text('💬  ${t(lang, 'whatsapp_wish')}',
-                style: TextStyle(color: p.cyan, fontWeight: FontWeight.bold)),
+            child: Text(
+              '💬  ${t(lang, 'whatsapp_wish')}',
+              style: TextStyle(color: p.cyan, fontWeight: FontWeight.bold),
+            ),
           ),
         ],
       ),
@@ -221,7 +283,8 @@ class _ConfettiPainter extends CustomPainter {
   final Animation<double> anim;
   final List<_Particle> particles;
   final List<Color> colors;
-  _ConfettiPainter(this.anim, this.particles, this.colors) : super(repaint: anim);
+  _ConfettiPainter(this.anim, this.particles, this.colors)
+    : super(repaint: anim);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -229,7 +292,9 @@ class _ConfettiPainter extends CustomPainter {
     for (final pt in particles) {
       final tt = (anim.value * pt.speed + pt.phase) % 1.0;
       final y = -20 + tt * (size.height + 40);
-      final x = (pt.x + math.sin((tt * 6 + pt.phase) * math.pi) * pt.sway) * size.width;
+      final x =
+          (pt.x + math.sin((tt * 6 + pt.phase) * math.pi) * pt.sway) *
+          size.width;
       paint.color = colors[pt.colorIndex].withValues(alpha: 0.85);
       canvas.save();
       canvas.translate(x, y);
@@ -238,10 +303,16 @@ class _ConfettiPainter extends CustomPainter {
         canvas.drawCircle(Offset.zero, pt.size / 2.6, paint);
       } else {
         canvas.drawRRect(
-            RRect.fromRectAndRadius(
-                Rect.fromCenter(center: Offset.zero, width: pt.size, height: pt.size * 0.45),
-                const Radius.circular(1.5)),
-            paint);
+          RRect.fromRectAndRadius(
+            Rect.fromCenter(
+              center: Offset.zero,
+              width: pt.size,
+              height: pt.size * 0.45,
+            ),
+            const Radius.circular(1.5),
+          ),
+          paint,
+        );
       }
       canvas.restore();
     }

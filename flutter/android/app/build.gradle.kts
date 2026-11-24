@@ -66,23 +66,32 @@ flutter {
     source = "../.."
 }
 
-// Every release APK also gets a copy named with the version, e.g.
-// build/app/outputs/flutter-apk/CelebriaV1.10.2.apk (Pedro's rule: the .apk
-// must say which version it is). The original app-release.apk is kept as-is
-// because the Flutter tool looks for that exact name after Gradle finishes.
-// Older CelebriaV*.apk copies are removed so only the current one remains.
+// Pedro's rules, applied on every release build:
+//  1. the APK carries its version in the file name: CelebriaV1.10.2.apk
+//  2. everything old is deleted — only the latest build remains.
+// Result: flutter/build/app/outputs/flutter-apk/CelebriaV<ver>.apk and
+// C:/Celebria/build/apk/CelebriaV<ver>.apk, nothing else from older builds.
+// (app-release.apk is re-created by the Flutter tool right AFTER Gradle
+// finishes, so it can't be removed here — build.ps1 / release.ps1 delete it.)
 tasks.matching { it.name == "assembleRelease" }.configureEach {
     doLast {
-        val apkDir = layout.buildDirectory.dir("outputs/apk/release").get().asFile
-        val src = File(apkDir, "app-release.apk")
-        if (src.exists()) {
-            val outDir = layout.buildDirectory.dir("outputs/flutter-apk").get().asFile
-            outDir.mkdirs()
-            val name = "CelebriaV$flutterVersionName.apk"
-            outDir.listFiles { f -> f.name.startsWith("CelebriaV") && f.name.endsWith(".apk") && f.name != name }
-                ?.forEach { it.delete() }
-            src.copyTo(File(outDir, name), overwrite = true)
-            println("Versioned APK: ${File(outDir, name).absolutePath}")
+        val src = layout.buildDirectory.file("outputs/apk/release/app-release.apk").get().asFile
+        if (!src.exists()) return@doLast
+        val name = "CelebriaV$flutterVersionName.apk"
+        val flutterApkDir = layout.buildDirectory.dir("outputs/flutter-apk").get().asFile
+        val publishDir = rootProject.projectDir.resolve("../../build/apk").canonicalFile
+        for (dir in listOf(flutterApkDir, publishDir)) {
+            dir.mkdirs()
+            dir.listFiles()?.forEach { f ->
+                val old = (f.name.startsWith("Celebria") && f.name != name) ||
+                    f.name.startsWith("app-debug.apk")
+                if (old && f.isFile) {
+                    f.delete()
+                    println("Removed old build: ${f.name}")
+                }
+            }
+            src.copyTo(File(dir, name), overwrite = true)
+            println("Versioned APK: ${File(dir, name).absolutePath}")
         }
     }
 }

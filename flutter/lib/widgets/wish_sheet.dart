@@ -7,6 +7,7 @@ import '../core/i18n.dart';
 import '../core/palette.dart';
 import '../models/contact.dart';
 import 'buttons.dart';
+import 'nav.dart';
 
 /// i18n key for the unit shown after an age, by date type.
 String yearsLabelKey(String kind) => switch (kind) {
@@ -80,6 +81,7 @@ Future<void> showWishSheet(BuildContext context, Contact c, String lang, Palette
   final templates = wishTemplates(c, lang);
   final ctrl = TextEditingController(text: templates[1]);
   var selected = 1;
+  var sent = false; // double tap: don't open WhatsApp twice / pop twice
   final labels = [t(lang, 'wish_formal'), t(lang, 'wish_warm'), t(lang, 'wish_funny')];
 
   return showModalBottomSheet(
@@ -144,11 +146,13 @@ Future<void> showWishSheet(BuildContext context, Contact c, String lang, Palette
                   const SizedBox(width: 10),
                   Expanded(
                     child: SolidButton('💬  ${t(lang, 'wish_send')}', p.green, onPressed: () {
+                      if (sent) return;
+                      sent = true;
                       launchUrl(
                         Uri.parse('https://wa.me/${waDigits(c.phone)}?text=${Uri.encodeComponent(ctrl.text)}'),
                         mode: LaunchMode.externalApplication,
                       );
-                      Navigator.of(sheetCtx).pop();
+                      closeOwnRoute(sheetCtx);
                     }),
                   ),
                 ],

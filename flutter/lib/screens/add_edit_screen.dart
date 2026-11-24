@@ -11,6 +11,7 @@ import '../notification_helper.dart';
 import '../state/app_state.dart';
 import '../widgets/avatar.dart';
 import '../widgets/buttons.dart';
+import '../widgets/nav.dart';
 import '../widgets/section_header.dart';
 
 /// Shared add/edit contact form. `existing == null` means "new contact".
@@ -39,6 +40,10 @@ class _AddEditScreenState extends State<AddEditScreen> {
   String _photo = '';
   String _error = '';
   bool _confirmingDelete = false;
+  // A quick double tap on Save/Delete used to run the action twice: a
+  // duplicated new contact, or two "close" calls that popped one screen
+  // too many.
+  final _guard = OnceGuard();
 
   bool get _editing => widget.existing != null;
 
@@ -405,7 +410,7 @@ class _AddEditScreenState extends State<AddEditScreen> {
               const SizedBox(width: 10),
               Expanded(
                 child: SolidButton('💾  ${t(lang, 'btn_save')}', p.cyan,
-                    onPressed: () => _save(state, lang)),
+                    onPressed: () => _guard.run(() => _save(state, lang))),
               ),
             ],
           ),
@@ -433,7 +438,7 @@ class _AddEditScreenState extends State<AddEditScreen> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: SolidButton(t(lang, 'confirm_yes'), p.red,
-                              onPressed: () => _delete(state)),
+                              onPressed: () => _guard.run(() => _delete(state))),
                         ),
                       ],
                     ),

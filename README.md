@@ -277,6 +277,7 @@ No requiere recompilar la app.
 - Los .vcf de Android escriben los nombres con acentos como `FN;CHARSET=UTF-8;ENCODING=QUOTED-PRINTABLE:Jos=C3=A9` — el parser debe leer parámetros y decodificar QP (ver `vcf_parser.dart` y `test/logic_test.dart`)
 - **Firma del APK:** `build.gradle.kts` firma el release con la llave *debug* de esta PC (`%USERPROFILE%\.android\debug.keystore`, contraseña pública `android`). Todas las versiones publicadas están firmadas con ella: si se pierde ese archivo, los usuarios NO podrán actualizar (tendrían que desinstalar y perder sus datos). Guarda 2 copias fuera de la PC (USB + nube, dentro de un ZIP cifrado). No cambiar a `celebria-release.jks` sin plan de migración: cambiar de llave rompe las actualizaciones (Android 9+ permite rotarla con `apksigner rotate`, pero Android 7–8 no)
 - Android 15 envía `BOOT_COMPLETED` cuando abres una app después de "Forzar detención" — `BootReceiver` lo ignora si `MainActivity.alive`
+- **`version.json` debe ir SIN BOM.** `[Text.Encoding]::UTF8` de PowerShell agrega `EF BB BF` y el `jsonDecode` de Dart lo rechaza: hasta el 2026-11-23 el aviso de actualización fallaba en silencio en todas las versiones. `release.ps1` ya usa `UTF8Encoding($false)` y `UpdateChecker` quita el BOM (desde la versión siguiente a 1.10.0)
 - "Forzar detención" borra todas las alarmas de la app: para probar notificaciones cierra la app con `am kill`, no con `am force-stop`
 - Exportar JSON usa `FilePicker.platform.saveFile(bytes:)`; importar usa `pickFiles(withData: true)`
 

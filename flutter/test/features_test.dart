@@ -1,5 +1,7 @@
 // Tests for v1.10.0 features: palettes, date types, gift reminders,
 // notification payloads, greeting templates, weekly backup schedule.
+import 'dart:convert';
+
 import 'package:celebria/core/palette.dart';
 import 'package:celebria/models/contact.dart';
 import 'package:celebria/notification_helper.dart';
@@ -97,6 +99,12 @@ void main() {
     test('waDigits keeps the country code digits only', () {
       expect(waDigits('+1 (809) 555-0101'), '18095550101');
     });
+  });
+
+  test('version.json with a UTF-8 BOM still parses once the BOM is stripped', () {
+    const body = '﻿{"latest":"1.10.0"}';
+    expect(() => jsonDecode(body), throwsFormatException);
+    expect(jsonDecode(body.replaceFirst('﻿', ''))['latest'], '1.10.0');
   });
 
   test('weekly backup is due after 7 days, or if the clock went backwards', () {

@@ -96,9 +96,12 @@ $vjNew = [ordered]@{
     minimum      = $vjCurrent.minimum   # se edita manualmente cuando se quiere forzar
     download_url = "https://github.com/pedroespinal/Celebria/releases/download/$TAG/Celebria-$TAG.apk"
 }
+# SIN BOM: [Text.Encoding]::UTF8 escribe un BOM (EF BB BF) al inicio y el
+# jsonDecode de Dart falla con el ("Unexpected character"), asi que la app
+# nunca mostraba el aviso de actualizacion. UTF8Encoding($false) = sin BOM.
 [System.IO.File]::WriteAllText($vjPath,
     ($vjNew | ConvertTo-Json -Compress),
-    [System.Text.Encoding]::UTF8)
+    (New-Object System.Text.UTF8Encoding($false)))
 Write-Host "      OK  (minimum=$($vjCurrent.minimum))"
 
 # -- 2. Compilar APK -----------------------------------------------------------

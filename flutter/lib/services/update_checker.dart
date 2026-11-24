@@ -40,7 +40,11 @@ class UpdateChecker {
           .timeout(const Duration(seconds: 6));
       if (resp.statusCode != 200) return;
 
-      final data = jsonDecode(resp.body) as Map<String, dynamic>;
+      // Strip a UTF-8 BOM: version.json written by PowerShell's
+      // [Text.Encoding]::UTF8 starts with U+FEFF and jsonDecode rejects it,
+      // which silently disabled the update prompt up to v1.10.0.
+      final body = utf8.decode(resp.bodyBytes).replaceFirst('\uFEFF', '');
+      final data = jsonDecode(body) as Map<String, dynamic>;
       final latest = data['latest'] as String? ?? '';
       final minimum = data['minimum'] as String? ?? '0.0.0';
       final dlUrl = data['download_url'] as String? ??

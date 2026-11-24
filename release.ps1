@@ -45,13 +45,23 @@ $APK   = "C:\Celebria\build\apk\Celebria-$Version.apk"
 Write-Host ""
 Write-Host "=== Celebria Release $TAG ===" -ForegroundColor Cyan
 
-# -- REGLA: la version siempre debe incrementar respecto a la actual ----------
+# -- REGLA: la version siempre debe incrementar respecto a la PUBLICADA --------
+# Se compara contra version.json ("latest" = ultima version publicada), no
+# contra constants.dart: por la regla de versionado cada cambio importante ya
+# sube appVersion en el codigo antes de publicar (ej. 1.10.0 -> 1.10.1), y
+# comparar contra el codigo rechazaba justo esa version.
 function ConvertTo-VersionParts([string]$v) {
     return ($v -split '\.') | ForEach-Object { [int]$_ }
 }
-$currentMatch = Select-String -Path "flutter\lib\core\constants.dart" -Pattern "appVersion\s*=\s*'([^']+)'" | Select-Object -First 1
-if (-not $currentMatch) { Write-Error "No se encontro appVersion en flutter\lib\core\constants.dart."; exit 1 }
-$currentVersion = $currentMatch.Matches[0].Groups[1].Value
+$currentVersion = $null
+try {
+    $currentVersion = (Get-Content "version.json" -Raw -Encoding UTF8 | ConvertFrom-Json).latest
+} catch { }
+if (-not $currentVersion) {
+    $currentMatch = Select-String -Path "flutter\lib\core\constants.dart" -Pattern "appVersion\s*=\s*'([^']+)'" | Select-Object -First 1
+    if (-not $currentMatch) { Write-Error "No se encontro la version publicada (version.json) ni appVersion."; exit 1 }
+    $currentVersion = $currentMatch.Matches[0].Groups[1].Value
+}
 $curParts = ConvertTo-VersionParts $currentVersion
 $newParts = ConvertTo-VersionParts $Version
 $isNewer = $false
@@ -62,7 +72,7 @@ for ($i = 0; $i -lt 3; $i++) {
     if ($n -lt $c) { break }
 }
 if (-not $isNewer) {
-    Write-Error "La version '$Version' no es mayor que la version actual ($currentVersion). Cada release debe incrementar la version."
+    Write-Error "La version '$Version' no es mayor que la ultima publicada ($currentVersion). Cada release debe incrementar la version."
     exit 1
 }
 Write-Host "      Version: $currentVersion -> $Version (OK, incrementa)" -ForegroundColor DarkGray

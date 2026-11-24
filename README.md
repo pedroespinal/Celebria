@@ -5,7 +5,7 @@
 Celebria es una app Android personal para nunca olvidar un cumpleaños.  
 Paleta Fiesta (teal + coral + dorado), dark y light mode, bilingüe ES/EN, sin publicidad y sin conexión requerida para su uso principal.
 
-[![Versión](https://img.shields.io/badge/versión-1.9.2-ff6b6b?style=flat-square)](https://github.com/pedroespinal/Celebria/releases/latest)
+[![Versión](https://img.shields.io/badge/versión-1.10.0-ff6b6b?style=flat-square)](https://github.com/pedroespinal/Celebria/releases/latest)
 [![Plataforma](https://img.shields.io/badge/plataforma-Android-6bcb77?style=flat-square)](https://github.com/pedroespinal/Celebria/releases/latest)
 [![Flutter](https://img.shields.io/badge/Flutter-Dart-ffd93d?style=flat-square)](https://flutter.dev/)
 
@@ -109,14 +109,25 @@ C:\Celebria\
 Las notificaciones se reprograman **al instante tras cualquier cambio** — agregar o
 editar un contacto, cambiar la hora o los días de anticipación en Configuración — y
 también al abrir la app. El código Dart lee la base de datos SQLite directamente
-(mismo proceso, sin intermediarios) y agenda hasta **4 slots por contacto** (2 años × 2 tipos):
+(mismo proceso, sin intermediarios) y arma un **plan** (`NotificationHelper.buildPlan`,
+función pura con pruebas unitarias) para el cumpleaños de este año y del siguiente:
 
-| Slot | Cuándo llega                                    |
-|------|-------------------------------------------------|
-| 1    | N días antes del cumpleaños — año corriente     |
-| 2    | El día del cumpleaños — año corriente (si activo) |
-| 3    | N días antes del cumpleaños — año siguiente     |
-| 4    | El día del cumpleaños — año siguiente (si activo) |
+| Aviso | Cuándo llega |
+|-------|--------------|
+| Anticipado | N días antes (`notif_days`; N = 0 → el mismo día) |
+| Día del cumpleaños | si N > 0 y "Aviso el día del cumpleaños" está ON, o si "Recordar todo el día" está ON |
+| Segundo recordatorio | `notif_days_2` días antes (si es distinto de N) |
+| Repeticiones | cada 30 min…6 h hasta las 23:59 del día (solo con "Recordar todo el día") |
+| Resumen mensual | día 1 de cada mes que tenga cumpleaños |
+
+El plan se **ordena por fecha y se limita a 400 avisos** (`maxScheduled`): Android rechaza
+más de 500 alarmas pendientes por app y antes de v1.9.8 los contactos que pasaban el límite
+se quedaban sin aviso en silencio. Los avisos lejanos que no caben se completan en cada
+reprogramación (abrir la app, cualquier cambio, reinicio). Las llamadas a `scheduleFromDB()`
+se ejecutan **en serie** para que dos reprogramaciones simultáneas no se pisen.
+
+Los nacidos el **29 de febrero** se avisan el 28 en años no bisiestos (`birthdayInYear()`,
+misma regla en la lista, el calendario, las notificaciones y el widget).
 
 Esto significa que **no necesitas abrir la app cada año** para recibir recordatorios —
 quedan programados 2 años por adelantado.
@@ -135,6 +146,12 @@ sin requerir ese permiso).
 
 **"También notificar el día del cumpleaños":** se activa desde Configuración → Notificaciones.
 Cuando está ON, se programa un segundo recordatorio la mañana misma del cumpleaños.
+
+**Alarmas exactas:** el manifest declara `USE_EXACT_ALARM` (Android 13+, concedido
+automáticamente a apps de recordatorios) además de `SCHEDULE_EXACT_ALARM`. Sin él, en
+Android 14+ las instalaciones nuevas tenían las alarmas exactas denegadas por defecto.
+⚠ Si algún día se publica en Google Play, Play exige justificar `USE_EXACT_ALARM`
+(una app de recordatorios de cumpleaños/calendario califica).
 
 **Requisito en Android 13+:** la app pedirá permiso `POST_NOTIFICATIONS` la primera
 vez que se abre. Si el usuario lo deniega, no llegará ninguna notificación.
@@ -162,7 +179,9 @@ El widget muestra el **próximo cumpleaños** directamente en el home screen de 
 - Fecha de cumpleaños (dd/mm)
 - Días restantes o "¡Hoy!" si es el día
 
-**Actualizaciones:** el widget se refresca automáticamente cada 30 minutos. También se actualiza cuando abres la app o cuando el teléfono reinicia.
+**Actualizaciones:** el widget se refresca automáticamente cada 30 minutos, y **al instante**
+después de cada reprogramación (agregar/editar/borrar un contacto, cambiar idioma) vía el
+canal `com.flet.celebria/widget` registrado en `MainActivity.configureFlutterEngine`.
 
 > **Nota técnica:** el widget lee la base de datos SQLite directamente desde Kotlin sin depender de que la app esté abierta. Funciona completamente en segundo plano.
 
@@ -182,6 +201,9 @@ $env:PATH = "C:\Users\D0nGibaFok\flutter\3.41.7\bin;" + $env:PATH
 Set-Location "C:\Celebria\flutter"
 flutter build apk --release
 # APK en: flutter\build\app\outputs\flutter-apk\app-release.apk
+
+# Pruebas unitarias (fechas, parser .vcf, plan de notificaciones):
+flutter test
 ```
 
 > **Nota:** `release.ps1` maneja este proceso completo automáticamente, incluyendo el versionado.
@@ -248,8 +270,55 @@ No requiere recompilar la app.
 - Cualquier widget cuyo `build()` retorne `Expanded(...)` (como `OptionButton`) NUNCA debe envolverse en `Padding` desde afuera — `Expanded` requiere ser hijo directo de un `Row`/`Column`. En modo release este error se ve como un simple **recuadro gris sin texto** (no el overlay rojo/amarillo de debug) — revisar `adb logcat` buscando "DiagnosticsProperty" si aparece
 - `NotificationHelper.initialize()` se llama tras el primer frame (`WidgetsBinding.instance.addPostFrameCallback`), no antes de `runApp()` — llamarlo antes puede fallar con `PlatformException` (null Activity) en `requestNotificationsPermission()`
 - **Nunca** llamar `requestExactAlarmsPermission()` automáticamente — confirmado en dispositivo real que esto redirige a una pantalla de Configuración de pantalla completa sin ninguna acción del usuario. El permiso de alarmas exactas es opt-in vía el popup nativo en `MainActivity.kt`
-- Las fotos de contactos se almacenan en `ApplicationDocumentsDirectory/photos/`
+- Las fotos de contactos se almacenan en `ApplicationDocumentsDirectory/photos/`; al cambiar/quitar la foto o borrar el contacto se elimina la copia vieja (`AppDb.deleteOwnedPhoto`, solo dentro de esa carpeta)
+- **Android limita a 500 las alarmas pendientes por app** — cada notificación programada es una alarma. Nunca programar sin tope: `buildPlan()` ordena por fecha y corta en 400
+- `DateTime(año, 2, 29)` en año no bisiesto NO lanza excepción: Dart lo convierte en 1 de marzo (y `Calendar` de Kotlin igual, por ser *lenient*). Usar siempre `birthdayInYear()`
+- Diferencias de días entre fechas locales: usar `DateTime.utc(...)` — con horario de verano un día puede durar 23 h y `.inDays` resta uno
+- Los .vcf de Android escriben los nombres con acentos como `FN;CHARSET=UTF-8;ENCODING=QUOTED-PRINTABLE:Jos=C3=A9` — el parser debe leer parámetros y decodificar QP (ver `vcf_parser.dart` y `test/logic_test.dart`)
+- **Firma del APK:** `build.gradle.kts` firma el release con la llave *debug* de esta PC (`%USERPROFILE%\.android\debug.keystore`, contraseña pública `android`). Todas las versiones publicadas están firmadas con ella: si se pierde ese archivo, los usuarios NO podrán actualizar (tendrían que desinstalar y perder sus datos). Guarda 2 copias fuera de la PC (USB + nube, dentro de un ZIP cifrado). No cambiar a `celebria-release.jks` sin plan de migración: cambiar de llave rompe las actualizaciones (Android 9+ permite rotarla con `apksigner rotate`, pero Android 7–8 no)
+- Android 15 envía `BOOT_COMPLETED` cuando abres una app después de "Forzar detención" — `BootReceiver` lo ignora si `MainActivity.alive`
+- "Forzar detención" borra todas las alarmas de la app: para probar notificaciones cierra la app con `am kill`, no con `am force-stop`
 - Exportar JSON usa `FilePicker.platform.saveFile(bytes:)`; importar usa `pickFiles(withData: true)`
+
+---
+
+## 🆕 Novedades v1.10.0 (2026-11-23)
+
+- **3 paletas de color** (Configuración → Paleta de colores), cada una con modo oscuro neón y modo claro suave: 🌴 **Tropical** (predeterminada), ⚡ Cyber, 🎉 Fiesta. Definidas en `lib/core/palette.dart` (`paletteFor(familia, modo)`); el contraste de todos los textos y etiquetas sobre colores está verificado por pruebas (WCAG ≥ 4.5 en etiquetas de botones)
+- **Brillo neón** (solo en oscuro) en la tarjeta de quien cumple hoy, cumpleaños redondos, botones principales y chips activos
+- **Ícono nuevo** neón Tropical (pastel con contornos luminosos, vela, campanita y confeti) como **ícono adaptativo** de Android 8+ (capa frontal + fondo con degradado), generado por `make_icon.py` → `dart run flutter_launcher_icons`. No reducir la capa frontal en el script: el generador ya le aplica un margen del 16 %
+- **Confeti animado** de partículas en la pantalla de celebración (`CustomPainter`, un solo `AnimationController`)
+- **Avatares con anillo** del color de la relación; el día del evento el anillo es un degradado que gira
+- **Widget** con estilo neón Tropical, ícono del tipo de fecha y "Cumple N años" / "N años juntos"
+- **Aniversarios y fechas especiales** (💍 / ⭐): columna nueva `contacts.kind` (`birthday|anniversary|other`), añadida por una migración aditiva en `AppDb.onOpen` (solo `ALTER TABLE ADD COLUMN` si falta; nunca toca datos). Filtro "💍 Especiales" en Inicio; textos de notificación, celebración y widget adaptados
+- **Tocar una notificación abre el contacto** (payload `contact:<id>`, también en arranque en frío vía `getNotificationAppLaunchDetails`)
+- **Mensajes de felicitación** con plantillas Formal / Cariñoso / Gracioso (nombre y edad incluidos, editables), enviar por WhatsApp o copiar — `lib/widgets/wish_sheet.dart`
+- **Recordatorio de regalo:** los avisos anticipados muestran la nota de regalo (`🎁 Idea de regalo: …`, texto expandible)
+- **Respaldo automático semanal** en `Descargas/Celebria/Celebria_auto_backup.json` vía MediaStore (Android 10+, sin permisos; sobrevive a desinstalar). Se ejecuta al abrir la app si pasaron 7 días; botón "Respaldar ahora". Android 7–9: carpeta Descargas propia de la app
+- `BootReceiver` ya no arranca un segundo motor Flutter si la app está abierta (Android 15 envía `BOOT_COMPLETED` al abrir una app tras "Forzar detención")
+- Se eliminó la copia de iOS (`C:\Celebria_IOS`): el proyecto es solo Android por ahora
+- 15 pruebas nuevas en `flutter/test/features_test.dart` (28 en total)
+
+---
+
+## 🆕 Novedades v1.9.8 (auditoría 2026-11-23)
+
+- **Notificaciones con muchos contactos:** respeta el límite de 500 alarmas de Android (antes, con ~80+ contactos, los últimos se quedaban sin aviso sin ningún error visible)
+- **"Recordar todo el día"** ahora funciona aunque el aviso anticipado sea de varios días y el aviso del día esté apagado
+- **29 de febrero:** se avisa y se muestra el 28 en años no bisiestos (antes la notificación caía el 1 de marzo y el calendario no lo mostraba)
+- **Cálculo de días** inmune al horario de verano; **edad "redonda"** basada en el próximo cumpleaños (ya no queda resaltada todo el año después de cumplirla)
+- **Importar .vcf** reescrito: nombres con acentos/ñ de Android (QUOTED-PRINTABLE), `BDAY` con hora, líneas plegadas, `item1.TEL`; ya no lee "tel"/"bday" dentro de las notas
+- **Sin duplicados al importar** JSON o .vcf (mismo nombre + fecha), en una sola transacción; el aviso dice cuántos se agregaron y cuántos se omitieron
+- **Formulario:** no deja guardar fechas imposibles (31 de abril, 30 de febrero)
+- **Inicio:** cada grupo ordenado por el cumpleaños más cercano; búsqueda sin acentos; el chip "Este mes" abre el Calendario (la guía ya lo decía); botón Atrás vuelve a Inicio
+- **Cambiar idioma** reprograma las notificaciones y el widget en el idioma nuevo
+- **Widget** se actualiza al instante tras cada cambio
+- **Actualizaciones:** "Descargar" baja el APK directo; "Ahora no" pospone 24 h (antes silenciaba esa versión para siempre)
+- **Notificación de prueba** avisa si Android tiene las notificaciones apagadas
+- Fotos viejas se borran al cambiarlas o al borrar el contacto
+- **Manual de usuario:** el texto ya no se corta a mitad de frase en pantallas de teléfono (los saltos de línea de continuación se unen al mostrarlo)
+- `USE_EXACT_ALARM` para avisos a la hora exacta en Android 13+
+- 13 pruebas unitarias nuevas en `flutter/test/logic_test.dart`
 
 ---
 

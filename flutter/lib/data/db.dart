@@ -54,7 +54,8 @@ class AppDb {
             notes     TEXT    DEFAULT '',
             relation  TEXT    DEFAULT 'friend',
             photo     TEXT    DEFAULT '',
-            gift_note TEXT    DEFAULT ''
+            gift_note TEXT    DEFAULT '',
+            kind      TEXT    DEFAULT 'birthday'
           )
         ''');
         await db.execute('''
@@ -63,6 +64,24 @@ class AppDb {
             value TEXT
           )
         ''');
+      },
+      // Additive, idempotent migration run on every open: only ADDs a
+      // column when it's missing, never touches existing rows/columns, so
+      // any older install (even the original Python-era DB) upgrades safely
+      // and BirthdayWidget.kt / MainActivity.kt keep reading the same file.
+      onOpen: (db) async {
+        final cols = (await db.rawQuery('PRAGMA table_info(contacts)'))
+            .map((r) => r['name'] as String)
+            .toSet();
+        if (!cols.contains('photo')) {
+          await db.execute("ALTER TABLE contacts ADD COLUMN photo TEXT DEFAULT ''");
+        }
+        if (!cols.contains('gift_note')) {
+          await db.execute("ALTER TABLE contacts ADD COLUMN gift_note TEXT DEFAULT ''");
+        }
+        if (!cols.contains('kind')) {
+          await db.execute("ALTER TABLE contacts ADD COLUMN kind TEXT DEFAULT 'birthday'");
+        }
       },
     );
   }
@@ -128,37 +147,82 @@ class AppDb {
               'notes': c.notes,
               'relation': c.relation,
               'gift_note': c.giftNote,
+              'kind': c.kind,
             })
         .toList();
     return const JsonEncoder.withIndent('  ')
         .convert({'app': appName, 'version': appVersion, 'contacts': data});
   }
 
-  /// Returns number of contacts imported, or -1 on parse failure.
-  Future<int> fromJson(String txt) async {
+  /// Parses a Celebria JSON backup and imports it via [importContacts].
+  /// Returns (imported, skipped), or null if the file isn't a valid backup.
+  Future<(int, int)?> fromJson(String txt) async {
+    final List<Contact> parsed = [];
     try {
       final obj = jsonDecode(txt);
       final List items = obj is List ? obj : (obj['contacts'] as List? ?? []);
       for (final raw in items) {
-        final c = raw as Map<String, dynamic>;
-        await addContact(Contact(
+        if (raw is! Map) continue;
+        final c = raw.cast<String, dynamic>();
+        String str(String k) => (c[k] ?? '').toString().trim();
+        int? num_(String k) => c[k] is num ? (c[k] as num).toInt() : int.tryParse(str(k));
+        final rel = str('relation');
+        parsed.add(Contact(
           id: 0,
-          name: c['name'] as String? ?? '?',
-          day: (c['day'] as num?)?.toInt() ?? 1,
-          month: (c['month'] as num?)?.toInt() ?? 1,
-          year: (c['year'] as num?)?.toInt(),
-          phone: c['phone'] as String? ?? '',
-          email: c['email'] as String? ?? '',
-          notes: c['notes'] as String? ?? '',
-          relation: c['relation'] as String? ?? 'friend',
-          giftNote: c['gift_note'] as String? ?? '',
+          name: str('name'),
+          day: num_('day') ?? 0,
+          month: num_('month') ?? 0,
+          year: num_('year'),
+          phone: str('phone'),
+          email: str('email'),
+          notes: str('notes'),
+          relation: const {'family', 'friend', 'work', 'other'}.contains(rel) ? rel : 'friend',
+          giftNote: str('gift_note'),
+          kind: normalizeKind(str('kind')),
         ));
       }
-      return items.length;
     } catch (_) {
-      return -1;
+      return null;
     }
+    return importContacts(parsed);
   }
+
+  /// Inserts contacts in ONE transaction (all-or-nothing, and much faster
+  /// than one commit per row), skipping rows with no name or an impossible
+  /// date and rows that already exist (same name — case/accent-insensitive
+  /// — and same day/month). Importing the same backup or .vcf twice used to
+  /// duplicate every contact, which also doubled every notification.
+  /// Returns (imported, skipped).
+  Future<(int, int)> importContacts(List<Contact> items) async {
+    final db = await _database;
+    var added = 0, skipped = 0;
+    await db.transaction((txn) async {
+      final existing = <String>{
+        for (final r in await txn.query('contacts', columns: ['name', 'day', 'month', 'kind']))
+          _dupKey(r['name'] as String? ?? '', r['day'] as int? ?? 0, r['month'] as int? ?? 0,
+              normalizeKind(r['kind'] as String?)),
+      };
+      for (final c in items) {
+        final name = c.name.trim();
+        final validDate = c.month >= 1 && c.month <= 12 && c.day >= 1 &&
+            c.day <= DateTime(2024, c.month + 1, 0).day;
+        final key = _dupKey(name, c.day, c.month, c.kind);
+        if (name.isEmpty || !validDate || existing.contains(key)) {
+          skipped++;
+          continue;
+        }
+        final year = (c.year != null && c.year! > 1900 && c.year! <= DateTime.now().year) ? c.year : null;
+        await txn.insert('contacts', c.copyWith(name: name, year: year, clearYear: year == null)
+            .toMap(includeId: false));
+        existing.add(key);
+        added++;
+      }
+    });
+    return (added, skipped);
+  }
+
+  static String _dupKey(String name, int day, int month, String kind) =>
+      '${normalizeForSearch(name.trim())}|$day|$month|$kind';
 
   // ── Photo storage ────────────────────────────────────────────────────────
   /// Copies a picked image into the app's data dir and returns the new path.
@@ -176,4 +240,31 @@ class AppDb {
       return srcPath;
     }
   }
+
+  /// Deletes a photo file, but only one this app copied into its own
+  /// `photos/` folder — never a file elsewhere on the device.
+  Future<void> deleteOwnedPhoto(String path) async {
+    if (path.isEmpty) return;
+    try {
+      final docsDir = await path_provider.getApplicationDocumentsDirectory();
+      final photosDir = p.join(docsDir.path, 'photos');
+      if (p.isWithin(photosDir, path)) {
+        final f = File(path);
+        if (await f.exists()) await f.delete();
+      }
+    } catch (_) {}
+  }
+}
+
+/// Lower-case and strip Spanish/Latin accents so "jose" finds "José" and
+/// "MARÍA" equals "maria" when detecting duplicates.
+String normalizeForSearch(String s) {
+  const from = 'áàäâãåéèëêíìïîóòöôõúùüûñçÁÀÄÂÃÅÉÈËÊÍÌÏÎÓÒÖÔÕÚÙÜÛÑÇ';
+  const to   = 'aaaaaaeeeeiiiiooooouuuuncaaaaaaeeeeiiiiooooouuuunc';
+  final sb = StringBuffer();
+  for (final ch in s.toLowerCase().split('')) {
+    final i = from.indexOf(ch);
+    sb.write(i >= 0 ? to[i] : ch);
+  }
+  return sb.toString();
 }

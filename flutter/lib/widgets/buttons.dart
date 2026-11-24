@@ -15,17 +15,30 @@ class SolidButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
     final button = ElevatedButton(
       onPressed: onPressed,
       style: ElevatedButton.styleFrom(
         backgroundColor: color,
-        foregroundColor: Colors.white,
+        // Neon fills are bright: dark text on them, white on deep colors.
+        foregroundColor: onColor(color),
+        elevation: 0,
         padding: const EdgeInsets.symmetric(vertical: 14),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
       child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
     );
-    return expand ? SizedBox(width: double.infinity, child: button) : button;
+    // Soft neon halo in dark mode.
+    final glowing = dark
+        ? DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              boxShadow: [BoxShadow(color: color.withValues(alpha: 0.35), blurRadius: 12)],
+            ),
+            child: button,
+          )
+        : button;
+    return expand ? SizedBox(width: double.infinity, child: glowing) : glowing;
   }
 }
 
@@ -66,6 +79,7 @@ class OptionButton extends StatelessWidget {
           color: active ? palette.cyandim : palette.bg3,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: active ? palette.cyan : palette.border),
+          boxShadow: active ? palette.glow(palette.cyan, strength: 0.4) : null,
         ),
         child: FittedBox(
           fit: BoxFit.scaleDown,

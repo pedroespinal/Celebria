@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../core/date_utils.dart';
 import '../core/i18n.dart';
@@ -8,6 +7,7 @@ import '../core/palette.dart';
 import '../models/contact.dart';
 import '../state/app_state.dart';
 import '../widgets/avatar.dart';
+import '../widgets/wish_sheet.dart';
 import 'add_edit_screen.dart';
 
 class DetailScreen extends StatelessWidget {
@@ -30,7 +30,7 @@ class DetailScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
-    final p = state.theme == 'dark' ? darkPalette : lightPalette;
+    final p = state.palette;
     final lang = state.lang;
 
     Contact? c;
@@ -57,8 +57,8 @@ class DetailScreen extends StatelessWidget {
         't2');
 
     var ds = lang == 'es'
-        ? '${c.day} de ${monthName(lang, c.month)}'
-        : '${monthName(lang, c.month)} ${c.day}';
+        ? '${kindIcon(c.kind)}  ${c.day} de ${monthName(lang, c.month)}'
+        : '${kindIcon(c.kind)}  ${monthName(lang, c.month)} ${c.day}';
     if (c.year != null) ds += lang == 'es' ? ', ${c.year}' : ', ${c.year}';
 
     final stat1Val = dLeft == 0 ? t(lang, 'today_badge') : '$dLeft';
@@ -103,7 +103,13 @@ class DetailScreen extends StatelessWidget {
             relColor,
             Column(
               children: [
-                ContactAvatar(photo: c.photo, name: c.name, relation: c.relation, palette: p, size: 80),
+                ContactAvatar(
+                    photo: c.photo,
+                    name: c.name,
+                    relation: c.relation,
+                    palette: p,
+                    size: 84,
+                    celebrating: dLeft == 0),
                 const SizedBox(height: 8),
                 Text(c.name,
                     textAlign: TextAlign.center,
@@ -137,7 +143,8 @@ class DetailScreen extends StatelessWidget {
                     Text(age != null ? '$age' : '?',
                         textAlign: TextAlign.center,
                         style: TextStyle(fontSize: 24, color: p.green, fontWeight: FontWeight.bold)),
-                    Text(t(lang, 'years'), textAlign: TextAlign.center, style: TextStyle(fontSize: 11, color: p.t3)),
+                    Text(t(lang, yearsLabelKey(c.kind)),
+                        textAlign: TextAlign.center, style: TextStyle(fontSize: 11, color: p.t3)),
                   ]),
                 ),
               ),
@@ -171,16 +178,13 @@ class DetailScreen extends StatelessWidget {
               borderRadius: BorderRadius.circular(10),
               child: InkWell(
                 borderRadius: BorderRadius.circular(10),
-                onTap: () {
-                  final digits = c!.phone.replaceAll(RegExp(r'[^0-9]'), '');
-                  launchUrl(Uri.parse('https://wa.me/$digits'),
-                      mode: LaunchMode.externalApplication);
-                },
+                // Opens the greeting picker (formal / warm / funny), then WhatsApp.
+                onTap: () => showWishSheet(context, c!, lang, p),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   child: Text('💬  ${t(lang, 'btn_whatsapp')}',
                       textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                      style: TextStyle(color: onColor(p.green), fontWeight: FontWeight.bold)),
                 ),
               ),
             ),

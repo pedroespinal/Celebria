@@ -2,7 +2,7 @@
 description: "Celebria — Recordatorio de Cumpleanos"
 publish_to: 'none'
 
-version: 1.9.7+10907
+version: 1.10.0+11000
 
 environment:
   sdk: ^3.11.5
@@ -55,4 +55,8 @@ flutter:
 flutter_launcher_icons:
   android: true
   image_path: "assets/icon.png"
+  # Adaptive icon (Android 8+): neon artwork over the Tropical background,
+  # so every launcher mask (circle, squircle, teardrop) crops it cleanly.
+  adaptive_icon_background: "assets/icon_bg.png"
+  adaptive_icon_foreground: "assets/icon_fg.png"
   min_sdk_android: 24

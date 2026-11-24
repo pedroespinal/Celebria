@@ -25,6 +25,10 @@ class BootReceiver : BroadcastReceiver() {
         val action = intent.action ?: return
         if (action != Intent.ACTION_BOOT_COMPLETED &&
             action != Intent.ACTION_MY_PACKAGE_REPLACED) return
+        // Android 15+ also sends BOOT_COMPLETED when an app is opened after a
+        // "Force stop". If the UI is already up it reschedules on its own —
+        // don't spin up a second (headless) Flutter engine racing with it.
+        if (MainActivity.alive) return
 
         // Keeps the process alive past onReceive() while the headless
         // engine finishes the async DB read + notification scheduling.

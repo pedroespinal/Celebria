@@ -51,8 +51,16 @@ class UpdateChecker {
 
       final forced = _isGreater(_verTuple(minimum), cur);
       if (!forced) {
+        // "Not now" snoozes this version for 24 h (it used to hide it
+        // forever, contradicting the in-app guide and leaving users stuck
+        // on an old build).
         final snoozed = await AppDb.instance.getSetting('snoozed_update_ver', '');
-        if (snoozed == latest) return;
+        final snoozedAt =
+            int.tryParse(await AppDb.instance.getSetting('snoozed_update_at', '0')) ?? 0;
+        final ageMs = DateTime.now().millisecondsSinceEpoch - snoozedAt;
+        if (snoozed == latest && ageMs >= 0 && ageMs < const Duration(hours: 24).inMilliseconds) {
+          return;
+        }
       }
       if (_shown && !forced) return;
       _shown = true;
@@ -80,7 +88,10 @@ class UpdateChecker {
     final btnLater = es ? 'Ahora no' : 'Not now';
     final btnDl = es ? '⬇  Descargar' : '⬇  Download';
     final dlColor = forced ? p.red : p.cyan;
-    final releasesPage = 'https://github.com/$githubRepo/releases/tag/v$newVer';
+    // The dialog text says "tap the APK in your notifications when the
+    // download finishes", so open the direct APK link from version.json
+    // (a browser download), not the release web page.
+    final target = dlUrl.isNotEmpty ? dlUrl : 'https://github.com/$githubRepo/releases/tag/v$newVer';
 
     showDialog(
       context: context,
@@ -99,13 +110,15 @@ class UpdateChecker {
               TextButton(
                 onPressed: () async {
                   await AppDb.instance.setSetting('snoozed_update_ver', newVer);
+                  await AppDb.instance.setSetting(
+                      'snoozed_update_at', DateTime.now().millisecondsSinceEpoch);
                   if (dialogCtx.mounted) Navigator.of(dialogCtx).pop();
                 },
                 child: Text(btnLater, style: TextStyle(color: p.t3)),
               ),
             TextButton(
               onPressed: () {
-                launchUrl(Uri.parse(releasesPage), mode: LaunchMode.externalApplication);
+                launchUrl(Uri.parse(target), mode: LaunchMode.externalApplication);
                 Navigator.of(dialogCtx).pop();
               },
               child: Text(btnDl, style: TextStyle(color: dlColor)),

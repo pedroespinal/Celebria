@@ -1,33 +1,51 @@
 import 'constants.dart';
 
-/// Days from today until the next occurrence of day/month (this year, or
-/// next year if already passed). Clamps to day 28 for invalid dates (Feb 29
-/// in a non-leap year) exactly like the original Python `days_until`.
-int daysUntil(int day, int month) {
-  final today = DateTime.now();
-  final todayDate = DateTime(today.year, today.month, today.day);
-
-  DateTime? bd = _safeDate(today.year, month, day);
-  if (bd == null) {
-    final clamped = day > 28 ? 28 : day;
-    bd = _safeDate(today.year, month, clamped);
-    if (bd == null) return 999;
-  }
-  if (bd.isBefore(todayDate)) {
-    bd = _safeDate(today.year + 1, month, day) ??
-        _safeDate(today.year + 1, month, day > 28 ? 28 : day);
-    if (bd == null) return 999;
-  }
-  return bd.difference(todayDate).inDays;
+/// The calendar date of a day/month birthday in [year]. Days that don't exist
+/// that year (Feb 29 in a non-leap year, or an invalid "31" in a 30-day
+/// month from old/imported data) are clamped to the month's last day, so
+/// Feb 29 birthdays are celebrated on Feb 28 in common years. This single
+/// rule is shared by the home list, the calendar, the notifications and the
+/// home-screen widget so they always agree on the date.
+DateTime birthdayInYear(int year, int month, int day) {
+  final lastDay = DateTime(year, month + 1, 0).day;
+  final d = day < 1 ? 1 : (day > lastDay ? lastDay : day);
+  return DateTime(year, month, d);
 }
 
-DateTime? _safeDate(int year, int month, int day) {
-  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
-  final d = DateTime(year, month, day);
-  // DateTime normalizes overflow (e.g. Feb 30 -> Mar 2) instead of throwing —
-  // detect that and treat it as invalid, matching Python's date() ValueError.
-  if (d.month != month || d.day != day) return null;
-  return d;
+bool isValidBirthday(int day, int month) {
+  if (month < 1 || month > 12 || day < 1) return false;
+  // 2024 is a leap year, so Feb 29 is accepted as a real birthday.
+  return day <= DateTime(2024, month + 1, 0).day;
+}
+
+/// Date of the next occurrence (today counts) of a day/month birthday.
+DateTime nextBirthday(int day, int month, {DateTime? now}) {
+  final n = now ?? DateTime.now();
+  final today = DateTime(n.year, n.month, n.day);
+  var bd = birthdayInYear(today.year, month, day);
+  if (bd.isBefore(today)) bd = birthdayInYear(today.year + 1, month, day);
+  return bd;
+}
+
+/// Days from today until the next occurrence of day/month (0 = today).
+/// Computed on UTC calendar dates: a local-time difference spanning a DST
+/// change is 23h/25h long, and `.inDays` would truncate it to one day less.
+int daysUntil(int day, int month, {DateTime? now}) {
+  if (month < 1 || month > 12 || day < 1 || day > 31) return 999;
+  final n = now ?? DateTime.now();
+  final bd = nextBirthday(day, month, now: n);
+  return DateTime.utc(bd.year, bd.month, bd.day)
+      .difference(DateTime.utc(n.year, n.month, n.day))
+      .inDays;
+}
+
+/// Age the person turns on their next birthday (today counts), or null if
+/// no birth year is on file. Used for milestone badges, so a milestone that
+/// already happened earlier this year is no longer highlighted.
+int? ageOnNextBirthday(int day, int month, int? year, {DateTime? now}) {
+  if (year == null || year <= 0) return null;
+  final age = nextBirthday(day, month, now: now).year - year;
+  return age < 0 ? null : age;
 }
 
 /// (symbol, nameEs, nameEn) for the zodiac sign covering this day/month.
@@ -52,15 +70,13 @@ DateTime? _safeDate(int year, int month, int day) {
   return ('♓', 'Piscis', 'Pisces');
 }
 
-/// Current age, or null if no birth year on file. Adjusts down by 1 if this
-/// year's birthday hasn't happened yet.
-int? calcAge(int day, int month, int? year) {
+/// Current age, or null if no birth year on file. Uses the same clamped
+/// birthday date as everything else (Feb 29 -> Feb 28 in common years).
+int? calcAge(int day, int month, int? year, {DateTime? now}) {
   if (year == null || year == 0) return null;
-  final today = DateTime.now();
-  int age = today.year - year;
-  final birthdayAlreadyPassedThisYear =
-      today.month > month || (today.month == month && today.day >= day);
-  if (!birthdayAlreadyPassedThisYear) age -= 1;
+  final next = ageOnNextBirthday(day, month, year, now: now);
+  if (next == null) return 0;
+  final age = daysUntil(day, month, now: now) == 0 ? next : next - 1;
   return age < 0 ? 0 : age;
 }
 

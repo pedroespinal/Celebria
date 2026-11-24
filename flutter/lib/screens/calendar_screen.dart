@@ -95,12 +95,17 @@ class _CalendarScreenState extends State<CalendarScreen> {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
-    final p = state.theme == 'dark' ? darkPalette : lightPalette;
+    final p = state.palette;
     final lang = state.lang;
 
+    // Keyed by the day the birthday actually falls on in the shown year, so
+    // Feb 29 birthdays appear on Feb 28 in common years (same rule as the
+    // list and the notifications) instead of vanishing from the grid.
     final bdMap = <(int, int), List<Contact>>{};
     for (final c in state.contacts) {
-      bdMap.putIfAbsent((c.month, c.day), () => []).add(c);
+      if (c.month < 1 || c.month > 12) continue;
+      final d = birthdayInYear(_year, c.month, c.day);
+      bdMap.putIfAbsent((d.month, d.day), () => []).add(c);
     }
 
     final firstOfMonth = DateTime(_year, _month, 1);
@@ -132,7 +137,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   Text('$dn',
                       style: TextStyle(fontSize: 13, color: dc, fontWeight: FontWeight.bold)),
                   if (bds.isNotEmpty)
-                    Text('🎂' * (bds.length > 2 ? 2 : bds.length), style: const TextStyle(fontSize: 8))
+                    Text(bds.take(2).map((c) => kindIcon(c.kind)).join(),
+                        style: const TextStyle(fontSize: 8))
                   else
                     const SizedBox(height: 11),
                 ],

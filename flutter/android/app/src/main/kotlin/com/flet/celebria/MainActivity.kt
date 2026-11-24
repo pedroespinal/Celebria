@@ -2,6 +2,7 @@ package com.flet.celebria
 
 import android.app.AlarmManager
 import android.app.AlertDialog
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.database.sqlite.SQLiteDatabase
@@ -9,9 +10,13 @@ import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.Environment
+import android.provider.MediaStore
 import android.provider.Settings
 import androidx.core.app.NotificationManagerCompat
 import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.MethodChannel
 import java.io.File
 
 /**
@@ -28,6 +33,83 @@ import java.io.File
 class MainActivity : FlutterActivity() {
 
     private var promptedThisSession = false
+
+    override fun onCreate(savedInstanceState: android.os.Bundle?) {
+        alive = true
+        super.onCreate(savedInstanceState)
+    }
+
+    override fun onDestroy() {
+        alive = false
+        super.onDestroy()
+    }
+
+    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+        super.configureFlutterEngine(flutterEngine)
+        // Dart calls this after every reschedule (contact added/edited/
+        // deleted, language changed) so the home-screen widget is redrawn
+        // immediately instead of waiting for its 30-min update period.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.flet.celebria/widget")
+            .setMethodCallHandler { call, result ->
+                if (call.method == "refresh") {
+                    try { BirthdayWidget.updateAllWidgets(applicationContext) } catch (_: Exception) {}
+                    result.success(null)
+                } else {
+                    result.notImplemented()
+                }
+            }
+
+        // Weekly auto-backup (BackupService.dart): writes a JSON file into the
+        // public Downloads/Celebria folder so it survives an uninstall.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.flet.celebria/backup")
+            .setMethodCallHandler { call, result ->
+                if (call.method != "saveToDownloads") {
+                    result.notImplemented(); return@setMethodCallHandler
+                }
+                val name = call.argument<String>("name") ?: "Celebria_auto_backup.json"
+                val content = call.argument<String>("content") ?: ""
+                Thread {
+                    val where = try { saveToDownloads(name, content) } catch (_: Exception) { null }
+                    runOnUiThread { result.success(where) }
+                }.start()
+            }
+    }
+
+    /** Returns a human-readable location, or null on failure. */
+    private fun saveToDownloads(name: String, content: String): String? {
+        val bytes = content.toByteArray(Charsets.UTF_8)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            // MediaStore: no storage permission needed. Overwrite our own
+            // previous file instead of piling up "name (1).json" copies.
+            val resolver = contentResolver
+            val collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI
+            val relPath = Environment.DIRECTORY_DOWNLOADS + "/Celebria/"
+            var uri: Uri? = null
+            resolver.query(
+                collection, arrayOf(MediaStore.MediaColumns._ID),
+                "${MediaStore.MediaColumns.DISPLAY_NAME}=? AND ${MediaStore.MediaColumns.RELATIVE_PATH}=?",
+                arrayOf(name, relPath), null
+            )?.use { c ->
+                if (c.moveToFirst()) uri = android.content.ContentUris.withAppendedId(collection, c.getLong(0))
+            }
+            if (uri == null) {
+                val values = ContentValues().apply {
+                    put(MediaStore.MediaColumns.DISPLAY_NAME, name)
+                    put(MediaStore.MediaColumns.MIME_TYPE, "application/json")
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, relPath)
+                }
+                uri = resolver.insert(collection, values) ?: return null
+            }
+            resolver.openOutputStream(uri!!, "wt")?.use { it.write(bytes) } ?: return null
+            return relPath + name
+        }
+        // Android 7–9: app-specific Downloads folder (no permission needed).
+        val dir = File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "Celebria")
+        dir.mkdirs()
+        val f = File(dir, name)
+        f.writeBytes(bytes)
+        return f.absolutePath
+    }
 
     override fun onResume() {
         super.onResume()
@@ -147,6 +229,9 @@ class MainActivity : FlutterActivity() {
     }
 
     companion object {
+        /** True while the UI is running; BootReceiver then skips its headless
+         *  engine because the app itself is already rescheduling. */
+        @Volatile var alive = false
         private const val PREF_LAST_SHOWN = "notif_prompt_last_shown"
         private const val COOLDOWN_MS = 12 * 60 * 60 * 1000L // 12h — avoid nagging every resume
     }

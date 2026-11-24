@@ -1,8 +1,7 @@
-import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../core/constants.dart';
 import '../core/date_utils.dart';
@@ -12,9 +11,12 @@ import '../data/db.dart';
 import '../models/contact.dart';
 import '../services/sound_player.dart';
 import '../state/app_state.dart';
+import '../widgets/avatar.dart';
+import '../widgets/wish_sheet.dart';
 
-/// Full-screen birthday celebration — shown automatically when the app opens
-/// on someone's birthday (unless dismissed for today / hidden in Settings).
+/// Full-screen celebration — shown automatically when the app opens on
+/// someone's birthday / anniversary / special date (unless dismissed for
+/// today or hidden in Settings). Neon confetti falls behind the content.
 class BirthdayScreen extends StatefulWidget {
   final List<Contact> todaysContacts;
   const BirthdayScreen({super.key, required this.todaysContacts});
@@ -23,35 +25,33 @@ class BirthdayScreen extends StatefulWidget {
   State<BirthdayScreen> createState() => _BirthdayScreenState();
 }
 
-class _BirthdayScreenState extends State<BirthdayScreen> {
-  static const _confettiFrames = ['🎉', '🎊', '🎈', '🎁', '✨', '🎉', '🎊', '🎈', '🎁', '✨'];
-  String _confettiText = '';
-  Timer? _confettiTimer;
-  int _confettiIndex = 0;
+class _BirthdayScreenState extends State<BirthdayScreen> with SingleTickerProviderStateMixin {
+  late final AnimationController _anim =
+      AnimationController(vsync: this, duration: const Duration(seconds: 6))..repeat();
+  final List<_Particle> _particles = [];
 
   @override
   void initState() {
     super.initState();
     SoundPlayer.playBirthdayChime();
-    Future.delayed(const Duration(milliseconds: 500), _startConfetti);
-  }
-
-  void _startConfetti() {
-    _confettiTimer = Timer.periodic(const Duration(milliseconds: 220), (timer) {
-      if (_confettiIndex >= _confettiFrames.length) {
-        timer.cancel();
-        return;
-      }
-      setState(() {
-        _confettiText = _confettiFrames.sublist(0, _confettiIndex + 1).join('  ');
-        _confettiIndex++;
-      });
-    });
+    final rnd = math.Random();
+    for (var i = 0; i < 90; i++) {
+      _particles.add(_Particle(
+        x: rnd.nextDouble(),
+        phase: rnd.nextDouble(),
+        speed: 0.6 + rnd.nextDouble() * 0.9,
+        size: 5 + rnd.nextDouble() * 7,
+        sway: 0.01 + rnd.nextDouble() * 0.04,
+        spin: (rnd.nextDouble() - 0.5) * 12,
+        colorIndex: rnd.nextInt(5),
+        round: rnd.nextBool(),
+      ));
+    }
   }
 
   @override
   void dispose() {
-    _confettiTimer?.cancel();
+    _anim.dispose();
     super.dispose();
   }
 
@@ -67,112 +67,186 @@ class _BirthdayScreenState extends State<BirthdayScreen> {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
-    final p = state.theme == 'dark' ? darkPalette : lightPalette;
+    final p = state.palette;
     final lang = state.lang;
-    final today = DateTime.now();
+    final allBirthdays = widget.todaysContacts.every((c) => c.isBirthday);
+    final colors = [p.pink, p.cyan, p.yellow, p.purple, p.green];
 
     return PopScope(
       canPop: false,
       child: Scaffold(
         backgroundColor: p.bg,
-        body: SafeArea(
-          child: Column(
-            children: [
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(20, 36, 20, 20),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Text('🎈 🎊 🎉 🎁 🎉 🎊 🎈', style: TextStyle(fontSize: 22), textAlign: TextAlign.center),
-                      const SizedBox(height: 12),
-                      const Text('🎂', style: TextStyle(fontSize: 88), textAlign: TextAlign.center),
-                      const SizedBox(height: 12),
-                      Text(t(lang, 'popup_title'),
-                          textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 26, color: p.pink, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 12),
-                      Text(t(lang, 'birthday_screen_sub'),
-                          textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: p.t2)),
-                      const SizedBox(height: 12),
-                      Text(_confettiText, style: const TextStyle(fontSize: 24), textAlign: TextAlign.center),
-                      const SizedBox(height: 12),
-                      Container(height: 2, color: p.pink),
-                      const SizedBox(height: 12),
-                      for (final c in widget.todaysContacts) ...[
-                        _contactCelebrationCard(c, p, lang, today),
-                        const SizedBox(height: 12),
-                      ],
-                      const Text('✨ 🎊 🎉 🎊 ✨', style: TextStyle(fontSize: 18), textAlign: TextAlign.center),
-                    ],
+        body: Stack(
+          children: [
+            Positioned.fill(
+              child: IgnorePointer(
+                child: RepaintBoundary(
+                  child: CustomPaint(
+                    painter: _ConfettiPainter(_anim, _particles, colors),
                   ),
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: () => _celebrate(context),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: p.pink,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            SafeArea(
+              child: Column(
+                children: [
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(20, 36, 20, 20),
+                      child: Column(
+                        children: [
+                          Text(allBirthdays ? '🎂' : '🎉',
+                              style: const TextStyle(fontSize: 88), textAlign: TextAlign.center),
+                          const SizedBox(height: 12),
+                          Text(allBirthdays ? t(lang, 'popup_title') : t(lang, 'special_day_title'),
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 28,
+                                color: p.pink,
+                                fontWeight: FontWeight.bold,
+                                shadows: p.isDark
+                                    ? [Shadow(color: p.pink.withValues(alpha: 0.8), blurRadius: 18)]
+                                    : null,
+                              )),
+                          if (allBirthdays) ...[
+                            const SizedBox(height: 12),
+                            Text(t(lang, 'birthday_screen_sub'),
+                                textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: p.t2)),
+                          ],
+                          const SizedBox(height: 20),
+                          for (final c in widget.todaysContacts) ...[
+                            _card(c, p, lang),
+                            const SizedBox(height: 14),
+                          ],
+                        ],
+                      ),
                     ),
-                    child: Text('🎉  ${t(lang, 'popup_close')}',
-                        style: const TextStyle(fontWeight: FontWeight.bold)),
                   ),
-                ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                    child: Container(
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12), boxShadow: p.glow(p.pink)),
+                      child: ElevatedButton(
+                        onPressed: () => _celebrate(context),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: p.pink,
+                          foregroundColor: onColor(p.pink),
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        child: Text('🎉  ${t(lang, 'popup_close')}',
+                            style: const TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _contactCelebrationCard(Contact c, Palette p, String lang, DateTime today) {
+  Widget _card(Contact c, Palette p, String lang) {
     final age = calcAge(c.day, c.month, c.year);
-    final ageThisYear = c.year != null ? today.year - c.year! : null;
-    final isMilestone = ageThisYear != null && milestoneAges.contains(ageThisYear);
+    final isMilestone = c.isBirthday && age != null && milestoneAges.contains(age);
+    final accent = isMilestone ? p.yellow : p.cyan;
 
-    var line = age != null
-        ? '${c.name}\n${t(lang, 'popup_turns')} $age ${t(lang, 'popup_years')} 🎂'
-        : '${c.name}  🎂';
-    if (isMilestone) line += '\n✨ ${t(lang, 'milestone_popup')}';
-
-    final phoneDigits = c.phone.replaceAll(RegExp(r'[^0-9+]'), '').replaceFirst(RegExp(r'^\+'), '');
+    final String line;
+    if (c.kind == 'anniversary') {
+      line = '💍 ${t(lang, 'anniv_line')}${age != null && age > 0 ? ' · $age ${t(lang, 'years_anniv')}' : ''}';
+    } else if (c.kind == 'other') {
+      line = '⭐ ${t(lang, 'other_line')}${age != null && age > 0 ? ' · $age ${t(lang, 'years_other')}' : ''}';
+    } else {
+      line = age != null ? '${t(lang, 'popup_turns')} $age ${t(lang, 'popup_years')} 🎂' : '🎂';
+    }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        color: isMilestone ? p.purpledim : p.cyandim,
-        borderRadius: BorderRadius.circular(12),
-        border: isMilestone ? Border.all(color: p.yellow) : null,
+        color: p.card,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: accent, width: 1.5),
+        boxShadow: p.glow(accent, strength: 0.6),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(line,
+          ContactAvatar(
+              photo: c.photo, name: c.name, relation: c.relation, palette: p, size: 72, celebrating: true),
+          const SizedBox(height: 10),
+          Text(c.name,
               textAlign: TextAlign.center,
-              style: TextStyle(
-                  fontSize: 16, color: isMilestone ? p.yellow : p.cyan, fontWeight: FontWeight.bold)),
-          if (phoneDigits.isNotEmpty)
-            TextButton(
-              onPressed: () {
-                final msg = lang == 'es'
-                    ? '¡Feliz cumpleaños ${c.name}! 🎂🎉'
-                    : 'Happy birthday ${c.name}! 🎂🎉';
-                launchUrl(
-                  Uri.parse('https://wa.me/$phoneDigits?text=${Uri.encodeComponent(msg)}'),
-                  mode: LaunchMode.externalApplication,
-                );
-              },
-              child: Text('💬  ${t(lang, 'whatsapp_wish')}', style: TextStyle(color: p.cyan)),
-            ),
+              style: TextStyle(fontSize: 18, color: accent, fontWeight: FontWeight.bold)),
+          Text(line, textAlign: TextAlign.center, style: TextStyle(fontSize: 14, color: p.t1)),
+          if (isMilestone)
+            Text('✨ ${t(lang, 'milestone_popup')}',
+                textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: p.yellow)),
+          const SizedBox(height: 6),
+          TextButton(
+            onPressed: () => showWishSheet(context, c, lang, p),
+            child: Text('💬  ${t(lang, 'whatsapp_wish')}',
+                style: TextStyle(color: p.cyan, fontWeight: FontWeight.bold)),
+          ),
         ],
       ),
     );
   }
+}
+
+class _Particle {
+  final double x, phase, speed, size, sway, spin;
+  final int colorIndex;
+  final bool round;
+  const _Particle({
+    required this.x,
+    required this.phase,
+    required this.speed,
+    required this.size,
+    required this.sway,
+    required this.spin,
+    required this.colorIndex,
+    required this.round,
+  });
+}
+
+/// Falling confetti driven by one repeating controller: each particle's
+/// position is a pure function of time, so no per-frame allocations.
+class _ConfettiPainter extends CustomPainter {
+  final Animation<double> anim;
+  final List<_Particle> particles;
+  final List<Color> colors;
+  _ConfettiPainter(this.anim, this.particles, this.colors) : super(repaint: anim);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint();
+    for (final pt in particles) {
+      final tt = (anim.value * pt.speed + pt.phase) % 1.0;
+      final y = -20 + tt * (size.height + 40);
+      final x = (pt.x + math.sin((tt * 6 + pt.phase) * math.pi) * pt.sway) * size.width;
+      paint.color = colors[pt.colorIndex].withValues(alpha: 0.85);
+      canvas.save();
+      canvas.translate(x, y);
+      canvas.rotate(tt * pt.spin);
+      if (pt.round) {
+        canvas.drawCircle(Offset.zero, pt.size / 2.6, paint);
+      } else {
+        canvas.drawRRect(
+            RRect.fromRectAndRadius(
+                Rect.fromCenter(center: Offset.zero, width: pt.size, height: pt.size * 0.45),
+                const Radius.circular(1.5)),
+            paint);
+      }
+      canvas.restore();
+    }
+  }
+
+  @override
+  bool shouldRepaint(_ConfettiPainter old) => false;
 }

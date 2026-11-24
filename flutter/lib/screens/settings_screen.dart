@@ -12,6 +12,7 @@ import '../core/vcf_parser.dart';
 import '../data/db.dart';
 import '../models/contact.dart';
 import '../notification_helper.dart';
+import '../services/backup_service.dart';
 import '../state/app_state.dart';
 import '../widgets/buttons.dart';
 import '../widgets/section_header.dart';
@@ -35,6 +36,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _showPopup = true;
   bool _remindAllDay = false;
   int _remindInterval = 120;
+  bool _autoBackup = true;
+  DateTime? _lastBackup;
   bool _loaded = false;
 
   @override
@@ -54,8 +57,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _showPopup = await db.getSetting('show_popup', '1') == '1';
     _remindAllDay = await db.getSetting('remind_all_day', '0') == '1';
     _remindInterval = int.tryParse(await db.getSetting('remind_all_day_interval', '120')) ?? 120;
+    _autoBackup = await BackupService.enabled();
+    _lastBackup = await BackupService.lastBackup();
     if (mounted) setState(() => _loaded = true);
   }
+
+  String _fmtDate(DateTime d) =>
+      '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
 
   Future<void> _saveAndReschedule(String key, Object value) async {
     await AppDb.instance.setSetting(key, value);
@@ -135,17 +143,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final txt = file.bytes != null
           ? utf8.decode(file.bytes!)
           : await File(file.path!).readAsString();
-      final n = await AppDb.instance.fromJson(txt);
-      if (n >= 0) {
+      final res = await AppDb.instance.fromJson(txt);
+      if (res != null) {
         await state.reloadContacts();
         NotificationHelper.scheduleFromDB();
-        if (mounted) _toast('✓  $n ${t(lang, 'import_ok')}');
+        if (mounted) _toast(_importSummary(res, lang));
       } else if (mounted) {
-        _toast('Error en el archivo / File error');
+        _toast(t(lang, 'file_error'));
       }
     } catch (e) {
       if (mounted) _toast('Error: $e');
     }
+  }
+
+  String _importSummary((int, int) res, String lang) {
+    final (added, skipped) = res;
+    var msg = '✓  $added ${t(lang, 'import_ok')}';
+    if (skipped > 0) msg += '  ·  $skipped ${t(lang, 'import_skipped')}';
+    return msg;
   }
 
   Future<void> _doVcfImport(AppState state, String lang, Palette p) async {
@@ -156,9 +171,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
     if (result == null || result.files.isEmpty) return;
     final file = result.files.single;
-    final content = file.bytes != null
-        ? utf8.decode(file.bytes!, allowMalformed: true)
-        : await File(file.path!).readAsString();
+    final String content;
+    try {
+      content = file.bytes != null
+          ? utf8.decode(file.bytes!, allowMalformed: true)
+          : await File(file.path!).readAsString();
+    } catch (e) {
+      if (mounted) _toast(t(lang, 'file_error'));
+      return;
+    }
     final parsed = parseVcf(content);
     if (parsed.isEmpty) {
       if (mounted) _toast(t(lang, 'import_vcf_none'));
@@ -194,25 +215,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             TextButton(
               onPressed: () async {
-                var imported = 0;
-                for (var i = 0; i < parsed.length; i++) {
-                  if (!selected[i]) continue;
-                  final vc = parsed[i];
-                  await AppDb.instance.addContact(Contact(
-                    id: 0,
-                    name: vc.name ?? '?',
-                    day: vc.day ?? 1,
-                    month: vc.month ?? 1,
-                    year: vc.year,
-                    phone: vc.phone ?? '',
-                    relation: 'friend',
-                  ));
-                  imported++;
-                }
+                final res = await AppDb.instance.importContacts([
+                  for (var i = 0; i < parsed.length; i++)
+                    if (selected[i])
+                      Contact(
+                        id: 0,
+                        name: parsed[i].name ?? '',
+                        day: parsed[i].day ?? 0,
+                        month: parsed[i].month ?? 0,
+                        year: parsed[i].year,
+                        phone: parsed[i].phone ?? '',
+                        relation: 'friend',
+                      ),
+                ]);
                 if (dialogCtx.mounted) Navigator.of(dialogCtx).pop();
                 await state.reloadContacts();
                 NotificationHelper.scheduleFromDB();
-                if (mounted) _toast('✓  $imported ${t(lang, 'import_ok')}');
+                if (mounted) _toast(_importSummary(res, lang));
               },
               child: Text(t(lang, 'confirm_import'), style: TextStyle(color: p.cyan)),
             ),
@@ -225,7 +244,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
-    final p = state.theme == 'dark' ? darkPalette : lightPalette;
+    final p = state.palette;
     final lang = state.lang;
 
     if (!_loaded) return const Center(child: CircularProgressIndicator());
@@ -238,16 +257,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
           SectionHeader(t(lang, 'set_theme'), palette: p),
           Row(children: [
             OptionButton(
-                label: '🌙  Dark',
+                label: '🌙  ${t(lang, 'theme_dark')}',
                 active: state.theme == 'dark',
                 palette: p,
                 onTap: () => state.setTheme('dark')),
             const SizedBox(width: 10),
             OptionButton(
-                label: '☀  Light',
+                label: '☀  ${t(lang, 'theme_light')}',
                 active: state.theme == 'light',
                 palette: p,
                 onTap: () => state.setTheme('light')),
+          ]),
+          const SizedBox(height: 10),
+          SectionHeader(t(lang, 'set_palette'), palette: p),
+          Row(children: [
+            for (final fam in paletteFamilies)
+              OptionButton(
+                label: t(lang, 'pal_$fam'),
+                active: state.paletteFamily == fam,
+                palette: p,
+                margin: const EdgeInsets.only(right: 4),
+                onTap: () => state.setPaletteFamily(fam),
+              ),
           ]),
           const SizedBox(height: 10),
           SectionHeader(t(lang, 'set_lang'), palette: p),
@@ -465,7 +496,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ],
           const SizedBox(height: 12),
           SolidButton(t(lang, 'test_push_btn'), p.cyan,
-              onPressed: () => NotificationHelper.fireTestNotification(lang)),
+              onPressed: () async {
+                final enabled = await NotificationHelper.fireTestNotification(lang);
+                if (!enabled && mounted) _toast(t(lang, 'test_push_disabled'));
+              }),
           const SizedBox(height: 12),
           SectionHeader(t(lang, 'set_backup'), palette: p),
           Row(children: [
@@ -480,6 +514,40 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 10),
           SolidButton('📱  ${t(lang, 'import_vcf_btn')}', p.cyan,
               onPressed: () => _doVcfImport(state, lang, p)),
+          const SizedBox(height: 12),
+          SectionHeader(t(lang, 'set_autobackup'), palette: p),
+          Row(children: [
+            OptionButton(
+                label: t(lang, 'autobackup_on'),
+                active: _autoBackup,
+                palette: p,
+                onTap: () {
+                  setState(() => _autoBackup = true);
+                  AppDb.instance.setSetting('autobackup', '1');
+                  BackupService.maybeRun();
+                }),
+            const SizedBox(width: 10),
+            OptionButton(
+                label: t(lang, 'autobackup_off'),
+                active: !_autoBackup,
+                palette: p,
+                onTap: () {
+                  setState(() => _autoBackup = false);
+                  AppDb.instance.setSetting('autobackup', '0');
+                }),
+          ]),
+          const SizedBox(height: 6),
+          Text(
+              '${t(lang, 'autobackup_last')}: ${_lastBackup != null ? _fmtDate(_lastBackup!) : t(lang, 'autobackup_never')}  ·  ${lang == 'es' ? 'Descargas' : 'Downloads'}/Celebria',
+              style: TextStyle(fontSize: 11, color: p.t3)),
+          const SizedBox(height: 8),
+          SolidButton(t(lang, 'autobackup_now'), p.purple, onPressed: () async {
+            final ok = await BackupService.saveNow();
+            final last = await BackupService.lastBackup();
+            if (!mounted) return;
+            setState(() => _lastBackup = last);
+            _toast(t(lang, ok ? 'autobackup_done' : 'autobackup_fail'));
+          }),
           const SizedBox(height: 10),
           Row(children: [
             Expanded(

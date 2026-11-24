@@ -3,16 +3,23 @@ import 'package:provider/provider.dart';
 
 import '../core/help_data.dart';
 import '../core/i18n.dart';
-import '../core/palette.dart';
 import '../state/app_state.dart';
 
 class HelpScreen extends StatelessWidget {
   const HelpScreen({super.key});
 
+  /// The guide texts carry hard line breaks written for a wide layout; on a
+  /// phone they split sentences mid-way ("(tú\neliges"). Join a break when
+  /// the next line simply continues the sentence (starts lower-case or with
+  /// "("); list items, numbered steps, indented lines and blank-line
+  /// paragraphs keep their breaks.
+  static String _reflow(String s) =>
+      s.replaceAll(RegExp(r"\n(?=[a-záéíóúüñ('])"), ' ');
+
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
-    final p = state.theme == 'dark' ? darkPalette : lightPalette;
+    final p = state.palette;
     final lang = state.lang;
     final entries = lang == 'es' ? kHelpEs : kHelpEn;
 
@@ -49,7 +56,8 @@ class HelpScreen extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 8),
-                    Text(entry.body, style: TextStyle(fontSize: 12, color: p.t1, height: 1.4)),
+                    Text(_reflow(entry.body),
+                        style: TextStyle(fontSize: 12, color: p.t1, height: 1.4)),
                   ],
                 ),
               ),

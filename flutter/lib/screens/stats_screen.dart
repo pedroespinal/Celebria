@@ -36,7 +36,7 @@ class StatsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
-    final p = state.theme == 'dark' ? darkPalette : lightPalette;
+    final p = state.palette;
     final lang = state.lang;
     final rows = state.contacts;
     final today = DateTime.now();
@@ -85,15 +85,15 @@ class StatsScreen extends StatelessWidget {
 
     final milestoneRows = <(Contact, int)>[];
     for (final r in rows) {
-      if (r.year == null) continue;
-      final ageThisYr = today.year - r.year!;
-      if (milestoneAges.contains(ageThisYr)) milestoneRows.add((r, ageThisYr));
+      if (!r.isBirthday) continue;
+      final nextAge = ageOnNextBirthday(r.day, r.month, r.year);
+      if (nextAge != null && milestoneAges.contains(nextAge)) milestoneRows.add((r, nextAge));
     }
     milestoneRows.sort((a, b) => daysUntil(a.$1.day, a.$1.month).compareTo(daysUntil(b.$1.day, b.$1.month)));
 
     final zodiacCount = <String, int>{};
     for (final r in rows) {
-      if (r.day > 0 && r.month > 0) {
+      if (r.isBirthday && r.day > 0 && r.month > 0) {
         final (sym, _, _) = zodiacSign(r.day, r.month);
         zodiacCount[sym] = (zodiacCount[sym] ?? 0) + 1;
       }

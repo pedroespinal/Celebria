@@ -1,15 +1,23 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:timezone/data/latest_all.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
 
+import 'core/constants.dart';
+import 'core/date_utils.dart';
+import 'models/contact.dart';
 import 'data/db.dart';
 
 class NotificationHelper {
   static final FlutterLocalNotificationsPlugin _notif =
       FlutterLocalNotificationsPlugin();
   static bool _initialized = false;
+  static final Completer<void> _pluginReady = Completer<void>();
 
   // ── Public entry point called once at app start ─────────────────────────────
   //
@@ -29,9 +37,9 @@ class NotificationHelper {
     try {
       final String timeZoneName = await FlutterTimezone.getLocalTimezone();
       tz.setLocalLocation(tz.getLocation(timeZoneName));
-      print('[Celebria] Timezone set to: $timeZoneName');
+      debugPrint('[Celebria] Timezone set to: $timeZoneName');
     } catch (tzErr) {
-      print('[Celebria] Timezone init failed, using UTC fallback: $tzErr');
+      debugPrint('[Celebria] Timezone init failed, using UTC fallback: $tzErr');
     }
 
     try {
@@ -41,13 +49,23 @@ class NotificationHelper {
       await _notif.initialize(
         initSettings,
         onDidReceiveNotificationResponse: (NotificationResponse response) {
-          print('[Celebria] Notification tapped: ${response.id}');
+          debugPrint('[Celebria] Notification tapped: ${response.payload}');
+          final payload = response.payload;
+          if (payload == null || payload.isEmpty) return;
+          // On a cold start this can fire before the UI has registered
+          // onTap — keep it for launchPayload() instead of dropping it.
+          if (onTap != null) {
+            onTap!(payload);
+          } else {
+            _pendingPayload = payload;
+          }
         },
         onDidReceiveBackgroundNotificationResponse: _onBackgroundNotification,
       );
     } catch (e) {
-      print('[Celebria] _notif.initialize error: $e');
+      debugPrint('[Celebria] _notif.initialize error: $e');
     }
+    if (!_pluginReady.isCompleted) _pluginReady.complete();
 
     final androidPlugin = _notif
         .resolvePlatformSpecificImplementation<
@@ -65,13 +83,13 @@ class NotificationHelper {
         ),
       );
     } catch (e) {
-      print('[Celebria] createNotificationChannel error: $e');
+      debugPrint('[Celebria] createNotificationChannel error: $e');
     }
 
     try {
       await androidPlugin?.requestNotificationsPermission();
     } catch (e) {
-      print('[Celebria] requestNotificationsPermission error: $e');
+      debugPrint('[Celebria] requestNotificationsPermission error: $e');
     }
 
     // Deliberately NOT calling requestExactAlarmsPermission() here.
@@ -90,7 +108,31 @@ class NotificationHelper {
 
   @pragma('vm:entry-point')
   static void _onBackgroundNotification(NotificationResponse response) {
-    print('[Celebria] Background notification tapped: ${response.id}');
+    debugPrint('[Celebria] Background notification tapped: ${response.id}');
+  }
+
+  /// Set by main.dart: opens the contact a tapped notification is about.
+  /// Payloads: `contact:<id>` (per-contact reminders) or `month:<m>`.
+  static void Function(String payload)? onTap;
+  static String? _pendingPayload;
+
+  /// Payload of the notification that cold-started the app, if any (the
+  /// in-app callback above only fires when the app is already running).
+  static Future<String?> launchPayload() async {
+    try {
+      // main() initializes the plugin after the first frame; wait for it.
+      await _pluginReady.future.timeout(const Duration(seconds: 5));
+      final pending = _pendingPayload;
+      _pendingPayload = null;
+      if (pending != null) return pending;
+      final d = await _notif.getNotificationAppLaunchDetails();
+      debugPrint('[Celebria] launch details: launched=${d?.didNotificationLaunchApp} '
+          'payload=${d?.notificationResponse?.payload}');
+      if (d?.didNotificationLaunchApp ?? false) return d!.notificationResponse?.payload;
+    } catch (e) {
+      debugPrint('[Celebria] launchPayload error: $e');
+    }
+    return null;
   }
 
   static Future<bool> areNotificationsEnabled() async {
@@ -106,22 +148,21 @@ class NotificationHelper {
 
   // ── Schedule all notifications ───────────────────────────────────────────────
   //
-  // Per-contact slots (IDs 3000+):
-  //   • N days before birthday (advance notice) — current + next year
-  //   • Day-of notice (if notif_also_day_of == "1" and notifDays > 0)
-  //   • Second advance notice at notif_days_2 (if configured and ≠ notifDays)
+  // Builds the full plan (see [buildPlan]) and hands it to AlarmManager.
   //
-  // Monthly summary slots (IDs 2000–2023):
-  //   • On the 1st of each month that has birthday contacts — for next 2 years
-  //
-  // Same-day repeat slots (IDs 50000+, opt-in via remind_all_day):
-  //   • Extra reminders every `remind_all_day_interval` minutes throughout
-  //     the actual birthday day, starting after the day-of notice and
-  //     stopping at 23:59 that same day.
-  //
-  // Uses exactAllowWhileIdle for reliability; falls back to inexact if the
-  // SCHEDULE_EXACT_ALARM permission is not granted.
-  static Future<int> scheduleFromDB() async {
+  // Calls are serialized: every contact/settings change fires this without
+  // awaiting it, and two overlapping runs used to interleave their
+  // cancelAll()/zonedSchedule() calls, so the newest settings could be wiped
+  // by an older run that finished later.
+  static Future<void> _chain = Future.value();
+
+  static Future<int> scheduleFromDB() {
+    final run = _chain.then((_) => _scheduleFromDBImpl());
+    _chain = run.then((_) {}, onError: (_) {});
+    return run;
+  }
+
+  static Future<int> _scheduleFromDBImpl() async {
     int scheduled = 0;
     try {
       // Shared connection (see AppDb.raw doc comment) — this must NEVER be
@@ -133,196 +174,183 @@ class NotificationHelper {
       // hung on its loading spinner forever after this ran once).
       final db = await AppDb.instance.raw;
 
-      final lang         = await _getSetting(db, 'lang',               'es');
-      final notifDays    = int.tryParse(await _getSetting(db, 'notif_days',   '0')) ?? 0;
-      final notifDays2   = int.tryParse(await _getSetting(db, 'notif_days_2', '0')) ?? 0;
-      final notifHour    = int.tryParse(await _getSetting(db, 'notif_hour',   '8')) ?? 8;
-      final notifMinute  = int.tryParse(await _getSetting(db, 'notif_minute', '0')) ?? 0;
-      final alsoOnDay    = (await _getSetting(db, 'notif_also_day_of', '0')) == '1';
-      final summaryOn    = (await _getSetting(db, 'notif_monthly_summary', '1')) == '1';
-      final remindAllDay = (await _getSetting(db, 'remind_all_day', '0')) == '1';
-      final remindInterval =
-          int.tryParse(await _getSetting(db, 'remind_all_day_interval', '120')) ?? 120;
+      final settings = NotifSettings(
+        lang:           await _getSetting(db, 'lang', 'es'),
+        notifDays:      int.tryParse(await _getSetting(db, 'notif_days',   '0')) ?? 0,
+        notifDays2:     int.tryParse(await _getSetting(db, 'notif_days_2', '0')) ?? 0,
+        hour:           int.tryParse(await _getSetting(db, 'notif_hour',   '8')) ?? 8,
+        minute:         int.tryParse(await _getSetting(db, 'notif_minute', '0')) ?? 0,
+        alsoOnDay:      (await _getSetting(db, 'notif_also_day_of', '0')) == '1',
+        monthlySummary: (await _getSetting(db, 'notif_monthly_summary', '1')) == '1',
+        remindAllDay:   (await _getSetting(db, 'remind_all_day', '0')) == '1',
+        remindInterval: int.tryParse(await _getSetting(db, 'remind_all_day_interval', '120')) ?? 120,
+      );
 
       final contacts = await db.query(
         'contacts',
-        columns: ['name', 'day', 'month', 'year'],
+        columns: ['id', 'name', 'day', 'month', 'year', 'kind', 'gift_note'],
       );
 
       // cancelAll() can throw PlatformException("Missing type parameter")
       // when it tries to load/migrate notifications that were persisted by
-      // an older flutter_local_notifications version (e.g. leftover data
-      // from before this rewrite, or from any earlier plugin version).
-      // That crash must NOT abort the rest of this function — if it did,
-      // nothing below would ever get (re)scheduled, silently, forever,
-      // since every future call hits the same stuck bad data. Swallow it
-      // here and keep going; the zonedSchedule calls below still overwrite
-      // notifications by id regardless of whether the old ones were
-      // successfully cancelled first.
+      // an older flutter_local_notifications version. That crash must NOT
+      // abort the rest of this function — the zonedSchedule calls below
+      // still overwrite notifications by id regardless.
       try {
         await _notif.cancelAll();
       } catch (e) {
-        print('[Celebria] cancelAll() failed (continuing anyway): $e');
+        debugPrint('[Celebria] cancelAll() failed (continuing anyway): $e');
       }
 
-      final now    = DateTime.now();
-      final cutoff = now.add(const Duration(minutes: 1));
-      int notifId  = 3000;
-      // Repeat-during-the-day slots get their own high ID range, well clear
-      // of notifId (3000+, grows per contact) and summaryId (2000-2023), so
-      // there's no risk of collision even with many contacts.
-      int repeatId = 50000;
-
-      // ── Per-contact notifications ──────────────────────────────────────
-      for (final row in contacts) {
-        final name      = (row['name']  as String?) ?? '';
-        final day       = (row['day']   as int?)    ?? 0;
-        final month     = (row['month'] as int?)    ?? 0;
-        final birthYear = (row['year']  as int?);
-
-        if (day == 0 || month == 0 || name.isEmpty) continue;
-
-        final List<_NotifSlot> slots = [];
-
-        for (int yearOffset = 0; yearOffset <= 1; yearOffset++) {
-          DateTime birthday;
-          try {
-            birthday = DateTime(now.year + yearOffset, month, day);
-          } catch (_) {
-            continue;
-          }
-
-          // ── Primary advance notice ────────────────────────────────────
-          final notifDay  = birthday.subtract(Duration(days: notifDays));
-          final candidate = DateTime(
-              notifDay.year, notifDay.month, notifDay.day,
-              notifHour, notifMinute, 0);
-          if (candidate.isAfter(cutoff)) {
-            slots.add(_NotifSlot(candidate, birthday, notifDays));
-          }
-
-          // ── Day-of notice (only when advance > 0 and enabled) ────────
-          if (alsoOnDay && notifDays > 0) {
-            final dayOf = DateTime(
-                birthday.year, birthday.month, birthday.day,
-                notifHour, notifMinute, 0);
-            if (dayOf.isAfter(cutoff)) {
-              slots.add(_NotifSlot(dayOf, birthday, 0));
-            }
-          }
-
-          // ── Second advance notice (if different from primary) ─────────
-          if (notifDays2 > 0 && notifDays2 != notifDays) {
-            final notifDay2  = birthday.subtract(Duration(days: notifDays2));
-            final candidate2 = DateTime(
-                notifDay2.year, notifDay2.month, notifDay2.day,
-                notifHour, notifMinute, 0);
-            if (candidate2.isAfter(cutoff)) {
-              slots.add(_NotifSlot(candidate2, birthday, notifDays2));
-            }
-          }
-        }
-
-        for (final slot in slots) {
-          int? age;
-          if (birthYear != null && birthYear > 0) {
-            age = slot.birthday.year - birthYear;
-            if (age < 0) age = null;
-          }
-
-          final isMilestone = age != null && _isMilestoneAge(age);
-          final title = _buildTitle(name, age, slot.daysLabel, lang, isMilestone);
-          final body  = slot.daysLabel == 0
-              ? (isMilestone
-                  ? (lang == 'es'
-                      ? '¡Un día muy especial! Abre Celebria para celebrar 🎊'
-                      : 'A very special day! Open Celebria to celebrate 🎊')
-                  : (lang == 'es'
-                      ? 'Abre Celebria para celebrar 🎉'
-                      : 'Open Celebria to celebrate 🎉'))
-              : (lang == 'es'
-                  ? 'Prepara tu felicitación con tiempo 😊'
-                  : 'Prepare your wishes in advance 😊');
-
-          await _scheduleNotif(
-            notifId++, title, body,
-            tz.TZDateTime.from(slot.notifDt, tz.local),
-          );
-          scheduled++;
-
-          // ── Optional same-day repeats (IDs 50000+) ─────────────────────
-          // Only for the actual day-of slot (daysLabel == 0), never for
-          // advance-notice slots -- repeating "N days before" reminders
-          // would be confusing. Stops at the end of that calendar day.
-          if (slot.daysLabel == 0 && remindAllDay && remindInterval > 0) {
-            final endOfDay = DateTime(
-                slot.birthday.year, slot.birthday.month, slot.birthday.day, 23, 59, 0);
-            var repeatAt = slot.notifDt.add(Duration(minutes: remindInterval));
-            while (repeatAt.isBefore(endOfDay) && repeatAt.isAfter(cutoff)) {
-              await _scheduleNotif(
-                repeatId++, title, body,
-                tz.TZDateTime.from(repeatAt, tz.local),
-              );
-              scheduled++;
-              repeatAt = repeatAt.add(Duration(minutes: remindInterval));
-            }
-          }
-        }
+      final plan = buildPlan(contacts, settings, DateTime.now());
+      for (final n in plan) {
+        await _scheduleNotif(n.id, n.title, n.body, tz.TZDateTime.from(n.when, tz.local),
+            payload: n.payload);
+        scheduled++;
       }
-
-      // ── Monthly summary notifications (IDs 2000–2023) ─────────────────
-      if (summaryOn && contacts.isNotEmpty) {
-        // Build map month → list of names
-        final Map<int, List<String>> byMonth = {};
-        for (final row in contacts) {
-          final name  = (row['name']  as String?) ?? '';
-          final month = (row['month'] as int?)    ?? 0;
-          if (month == 0 || name.isEmpty) continue;
-          byMonth.putIfAbsent(month, () => []).add(name);
-        }
-
-        int summaryId = 2000;
-        for (int yearOffset = 0; yearOffset <= 1; yearOffset++) {
-          for (int m = 1; m <= 12; m++) {
-            final names = byMonth[m];
-            if (names == null || names.isEmpty) continue;
-
-            final firstOfMonth = DateTime(now.year + yearOffset, m, 1,
-                notifHour, notifMinute, 0);
-            if (!firstOfMonth.isAfter(cutoff)) continue;
-
-            final monthName = _monthName(m, lang);
-            final count     = names.length;
-            final preview   = names.length <= 3
-                ? names.join(', ')
-                : '${names.take(3).join(', ')} +${names.length - 3}';
-
-            final title = lang == 'es'
-                ? '📅 $monthName tiene $count cumpleaños'
-                : '📅 $monthName has $count birthday${count == 1 ? '' : 's'}';
-            final body = preview;
-
-            await _scheduleNotif(
-              summaryId++, title, body,
-              tz.TZDateTime.from(firstOfMonth, tz.local),
-            );
-            scheduled++;
-          }
-        }
-      }
-
-      print('[Celebria] Scheduled $scheduled birthday notification(s).');
+      debugPrint('[Celebria] Scheduled $scheduled notification(s).');
     } catch (e) {
-      print('[Celebria] scheduleFromDB error: $e');
+      debugPrint('[Celebria] scheduleFromDB error: $e');
     }
+    await _refreshHomeWidget();
     return scheduled;
+  }
+
+  /// Asks the native side to redraw the home-screen widget so it reflects a
+  /// contact that was just added/edited/deleted (or a language change)
+  /// right away instead of up to 30 min later. In the headless boot engine
+  /// the channel isn't registered — MissingPluginException is expected there.
+  static Future<void> _refreshHomeWidget() async {
+    try {
+      await const MethodChannel('com.flet.celebria/widget').invokeMethod('refresh');
+    } catch (_) {}
+  }
+
+  /// Android's AlarmManager refuses more than 500 pending alarms per app
+  /// ("Maximum limit of concurrent alarms 500 reached") and every scheduled
+  /// notification is one alarm. The old code scheduled per contact in DB
+  /// order, so with ~80 contacts (or a handful with "remind all day" every
+  /// 30 min) everything past the limit silently failed — whole contacts got
+  /// no reminder at all. The plan is now sorted by time and capped well
+  /// below the limit, so the nearest reminders always win; the far-future
+  /// tail is filled in on later runs (every app open, every change, boot).
+  static const int maxScheduled = 400;
+
+  /// Pure, testable: every notification that should be pending at [now],
+  /// sorted by time, capped at [maxScheduled], with ids assigned 1000+.
+  ///
+  /// Per contact, for this year's and next year's birthday:
+  ///   • N days before (notif_days; N == 0 means on the day itself)
+  ///   • Day-of notice (notif_also_day_of, when N > 0)
+  ///   • Second advance notice (notif_days_2, when set and ≠ N)
+  ///   • "Remind all day" (remind_all_day): a day-of notice plus repeats every
+  ///     `remind_all_day_interval` minutes until 23:59 — independent of the
+  ///     advance-notice settings (it used to silently do nothing unless the
+  ///     day-of notice happened to be enabled too).
+  /// Plus a monthly summary on the 1st of each month that has birthdays.
+  @visibleForTesting
+  static List<PlannedNotif> buildPlan(
+      List<Map<String, Object?>> contacts, NotifSettings s, DateTime now) {
+    final cutoff = now.add(const Duration(minutes: 1));
+    final out = <PlannedNotif>[];
+    final es = s.lang == 'es';
+
+    DateTime at(DateTime d, [int addMinutes = 0]) =>
+        DateTime(d.year, d.month, d.day, s.hour, s.minute + addMinutes);
+
+    void add(DateTime when, String title, String body, [String? payload]) {
+      if (when.isAfter(cutoff)) out.add(PlannedNotif(0, when, title, body, payload));
+    }
+
+    for (final row in contacts) {
+      final name      = ((row['name'] as String?) ?? '').trim();
+      final day       = (row['day']   as int?) ?? 0;
+      final month     = (row['month'] as int?) ?? 0;
+      final birthYear = row['year'] as int?;
+      final kind      = normalizeKind(row['kind'] as String?);
+      final gift      = ((row['gift_note'] as String?) ?? '').trim();
+      final id        = row['id'] as int?;
+      final payload   = id != null ? 'contact:$id' : null;
+      if (name.isEmpty || month < 1 || month > 12 || day < 1 || day > 31) continue;
+
+      for (int yearOffset = 0; yearOffset <= 1; yearOffset++) {
+        final birthday = birthdayInYear(now.year + yearOffset, month, day);
+        int? age;
+        if (birthYear != null && birthYear > 0) {
+          age = birthday.year - birthYear;
+          if (age < 0) age = null;
+        }
+        final milestone = kind == 'birthday' && age != null && milestoneAges.contains(age);
+
+        String title(int daysBefore) =>
+            _buildTitle(name, age, daysBefore, s.lang, milestone, kind);
+        final bodyDayOf = milestone
+            ? (es ? '¡Un día muy especial! Abre Celebria para celebrar 🎊'
+                  : 'A very special day! Open Celebria to celebrate 🎊')
+            : (es ? 'Abre Celebria para celebrar 🎉' : 'Open Celebria to celebrate 🎉');
+        // Gift reminder: advance notices surface the contact's gift idea.
+        final bodyBefore = gift.isNotEmpty
+            ? (es ? '🎁 Idea de regalo: $gift' : '🎁 Gift idea: $gift')
+            : (es ? 'Prepara tu felicitación con tiempo 😊' : 'Prepare your wishes in advance 😊');
+
+        final dayOfWanted = s.notifDays == 0 || s.alsoOnDay || s.remindAllDay;
+        if (s.notifDays > 0) {
+          add(at(birthday.subtract(Duration(days: s.notifDays))), title(s.notifDays), bodyBefore, payload);
+        }
+        if (dayOfWanted) add(at(birthday), title(0), bodyDayOf, payload);
+        if (s.notifDays2 > 0 && s.notifDays2 != s.notifDays) {
+          add(at(birthday.subtract(Duration(days: s.notifDays2))), title(s.notifDays2), bodyBefore, payload);
+        }
+        if (s.remindAllDay && s.remindInterval > 0) {
+          final endOfDay = DateTime(birthday.year, birthday.month, birthday.day, 23, 59);
+          for (var k = 1;; k++) {
+            final when = at(birthday, s.remindInterval * k);
+            if (!when.isBefore(endOfDay)) break;
+            add(when, title(0), bodyDayOf, payload);
+          }
+        }
+      }
+    }
+
+    if (s.monthlySummary) {
+      final byMonth = <int, List<String>>{};
+      for (final row in contacts) {
+        final name  = ((row['name'] as String?) ?? '').trim();
+        final month = (row['month'] as int?) ?? 0;
+        if (month < 1 || month > 12 || name.isEmpty) continue;
+        byMonth.putIfAbsent(month, () => []).add(name);
+      }
+      for (int yearOffset = 0; yearOffset <= 1; yearOffset++) {
+        for (int m = 1; m <= 12; m++) {
+          final names = byMonth[m];
+          if (names == null || names.isEmpty) continue;
+          final count = names.length;
+          final preview = count <= 3
+              ? names.join(', ')
+              : '${names.take(3).join(', ')} +${count - 3}';
+          final title = es
+              ? '📅 ${_monthName(m, s.lang)} tiene $count cumpleaños'
+              : '📅 ${_monthName(m, s.lang)} has $count birthday${count == 1 ? '' : 's'}';
+          add(at(DateTime(now.year + yearOffset, m, 1)), title, preview, 'month:$m');
+        }
+      }
+    }
+
+    out.sort((a, b) => a.when.compareTo(b.when));
+    final capped = out.length > maxScheduled ? out.sublist(0, maxScheduled) : out;
+    return [
+      for (var i = 0; i < capped.length; i++)
+        PlannedNotif(1000 + i, capped[i].when, capped[i].title, capped[i].body, capped[i].payload),
+    ];
   }
 
   // ── Immediate test notification (Settings → "Send test push notification") ─
   // Public: called directly from the Settings screen. Now that everything is
   // Dart (no more Python), there's no need for the old DB-flag-plus-resume
   // polling trick — the UI can just call this straight away.
-  static Future<void> fireTestNotification(String lang) async {
+  /// Returns false when Android has Celebria's notifications switched off
+  /// (the push is silently dropped then) so the UI can tell the user why.
+  static Future<bool> fireTestNotification(String lang) async {
     const details = NotificationDetails(
       android: AndroidNotificationDetails(
         'celebria_birthdays',
@@ -340,16 +368,17 @@ class NotificationHelper {
         : 'If you see this, Celebria notifications are working correctly.';
     try {
       await _notif.show(9999, title, body, details);
-      print('[Celebria] Test notification fired.');
+      debugPrint('[Celebria] Test notification fired.');
     } catch (e) {
-      print('[Celebria] Test notification failed: $e');
+      debugPrint('[Celebria] Test notification failed: $e');
     }
+    return areNotificationsEnabled();
   }
 
   // ── Schedule a single notification with exact alarm fallback ────────────────
   static Future<void> _scheduleNotif(
-      int id, String title, String body, tz.TZDateTime when) async {
-    const details = NotificationDetails(
+      int id, String title, String body, tz.TZDateTime when, {String? payload}) async {
+    final details = NotificationDetails(
       android: AndroidNotificationDetails(
         'celebria_birthdays',
         'Birthday Reminders',
@@ -358,12 +387,15 @@ class NotificationHelper {
         priority: Priority.high,
         icon: '@mipmap/ic_launcher',
         enableVibration: true,
+        // Expandable text: long gift ideas / name lists aren't cut off.
+        styleInformation: BigTextStyleInformation(body),
       ),
     );
     try {
       await _notif.zonedSchedule(
         id, title, body, when, details,
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        payload: payload,
       );
     } catch (_) {
       // SCHEDULE_EXACT_ALARM not granted — fall back to inexact
@@ -371,44 +403,51 @@ class NotificationHelper {
         await _notif.zonedSchedule(
           id, title, body, when, details,
           androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+          payload: payload,
         );
       } catch (e) {
-        print('[Celebria] Could not schedule notif $id: $e');
+        debugPrint('[Celebria] Could not schedule notif $id: $e');
       }
     }
   }
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
 
-  static bool _isMilestoneAge(int age) {
-    const milestones = {15, 18, 21, 25, 30, 40, 50, 60, 70, 75, 80, 90, 100};
-    return milestones.contains(age);
-  }
-
-  static String _buildTitle(
-      String name, int? age, int daysLabel, String lang, bool isMilestone) {
+  static String _buildTitle(String name, int? age, int daysLabel, String lang,
+      bool isMilestone, [String kind = 'birthday']) {
+    final es = lang == 'es';
+    final when = daysLabel == 0
+        ? (es ? 'HOY' : 'TODAY')
+        : (es ? 'en $daysLabel día(s)' : 'in $daysLabel day(s)');
+    if (kind == 'anniversary') {
+      final yrs = age != null && age > 0 ? (es ? ' ($age años)' : ' ($age years)') : '';
+      return daysLabel == 0
+          ? (es ? '💍 ¡Aniversario de $name HOY!$yrs' : '💍 $name\'s anniversary is TODAY!$yrs')
+          : (es ? '💍 Aniversario de $name $when$yrs' : '💍 $name\'s anniversary $when$yrs');
+    }
+    if (kind == 'other') {
+      final yrs = age != null && age > 0 ? (es ? ' ($age años)' : ' ($age years)') : '';
+      return daysLabel == 0
+          ? (es ? '⭐ ¡$name es HOY!$yrs' : '⭐ $name is TODAY!$yrs')
+          : '⭐ $name $when$yrs';
+    }
     final emoji = isMilestone ? '🎊' : '🎂';
-    if (lang == 'es') {
+    if (es) {
       if (daysLabel == 0) {
         return age != null
             ? '$emoji ¡$name cumple $age años HOY!'
             : '$emoji ¡$name cumple años HOY!';
-      } else {
-        return age != null
-            ? '$emoji $name cumple $age años en $daysLabel día(s)'
-            : '$emoji $name cumple años en $daysLabel día(s)';
       }
-    } else {
-      if (daysLabel == 0) {
-        return age != null
-            ? '$emoji $name turns $age TODAY!'
-            : "$emoji $name's birthday is TODAY!";
-      } else {
-        return age != null
-            ? '$emoji $name turns $age in $daysLabel day(s)'
-            : "$emoji $name's birthday in $daysLabel day(s)";
-      }
+      return age != null
+          ? '$emoji $name cumple $age años en $daysLabel día(s)'
+          : '$emoji $name cumple años en $daysLabel día(s)';
     }
+    if (daysLabel == 0) {
+      return age != null ? '$emoji $name turns $age TODAY!' : "$emoji $name's birthday is TODAY!";
+    }
+    return age != null
+        ? '$emoji $name turns $age in $daysLabel day(s)'
+        : "$emoji $name's birthday in $daysLabel day(s)";
   }
 
   static String _monthName(int month, String lang) {
@@ -433,10 +472,28 @@ class NotificationHelper {
   }
 }
 
-// Data class for a scheduled notification slot
-class _NotifSlot {
-  final DateTime notifDt;
-  final DateTime birthday;
-  final int daysLabel; // 0 = day-of, N = N days before
-  const _NotifSlot(this.notifDt, this.birthday, this.daysLabel);
+class PlannedNotif {
+  final int id;
+  final DateTime when;
+  final String title;
+  final String body;
+  final String? payload;
+  const PlannedNotif(this.id, this.when, this.title, this.body, [this.payload]);
+}
+
+class NotifSettings {
+  final String lang;
+  final int notifDays, notifDays2, hour, minute, remindInterval;
+  final bool alsoOnDay, monthlySummary, remindAllDay;
+  const NotifSettings({
+    this.lang = 'es',
+    this.notifDays = 0,
+    this.notifDays2 = 0,
+    this.hour = 8,
+    this.minute = 0,
+    this.alsoOnDay = false,
+    this.monthlySummary = true,
+    this.remindAllDay = false,
+    this.remindInterval = 120,
+  });
 }

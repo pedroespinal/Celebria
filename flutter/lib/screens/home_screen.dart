@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../core/date_utils.dart';
 import '../core/i18n.dart';
 import '../core/palette.dart';
+import '../data/db.dart';
 import '../models/contact.dart';
 import '../state/app_state.dart';
 import '../widgets/contact_card.dart';
@@ -12,22 +13,32 @@ import 'detail_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   final VoidCallback onOpenAdd;
-  const HomeScreen({super.key, required this.onOpenAdd});
+  final VoidCallback? onOpenCalendar;
+  const HomeScreen({super.key, required this.onOpenAdd, this.onOpenCalendar});
 
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
-    final palette = state.theme == 'dark' ? darkPalette : lightPalette;
+    final palette = state.palette;
     final lang = state.lang;
 
     var rows = state.contacts;
-    if (state.relationFilter != 'all') {
+    if (state.relationFilter == 'special') {
+      rows = rows.where((c) => !c.isBirthday).toList();
+    } else if (state.relationFilter != 'all') {
       rows = rows.where((c) => c.relation == state.relationFilter).toList();
     }
     if (state.search.isNotEmpty) {
-      final q = state.search.toLowerCase();
-      rows = rows.where((c) => c.name.toLowerCase().contains(q)).toList();
+      // Accent-insensitive: "jose" finds "José", "munoz" finds "Muñoz".
+      final q = normalizeForSearch(state.search.trim());
+      rows = rows.where((c) => normalizeForSearch(c.name).contains(q)).toList();
     }
+    // DB order is calendar order (Jan→Dec). Sort by days remaining instead,
+    // so in November the "All" section starts with December, not January.
+    rows = [...rows]..sort((a, b) {
+        final d = daysUntil(a.day, a.month).compareTo(daysUntil(b.day, b.month));
+        return d != 0 ? d : a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      });
 
     final today = rows.where((c) => daysUntil(c.day, c.month) == 0).toList();
     final week = rows.where((c) {
@@ -42,9 +53,13 @@ class HomeScreen extends StatelessWidget {
 
     final now = DateTime.now();
     final monthBdays = state.contacts.where((c) => c.month == now.month).toList();
+    // "cumpleaños" only when every date this month is a birthday; with
+    // anniversaries/special dates mixed in, say "fechas" / "dates".
+    final onlyBirthdays = monthBdays.every((c) => c.isBirthday);
+    final n = monthBdays.length;
     final monthLabel = lang == 'es'
-        ? '${monthName(lang, now.month)}: ${monthBdays.length} cumpleaños'
-        : '${monthName(lang, now.month)}: ${monthBdays.length} birthday${monthBdays.length == 1 ? '' : 's'}';
+        ? '${monthName(lang, now.month)}: $n ${onlyBirthdays ? 'cumpleaños' : (n == 1 ? 'fecha' : 'fechas')}'
+        : '${monthName(lang, now.month)}: $n ${onlyBirthdays ? 'birthday' : 'date'}${n == 1 ? '' : 's'}';
 
     void openContact(Contact c) {
       Navigator.of(context).push(
@@ -63,12 +78,13 @@ class HomeScreen extends StatelessWidget {
                   alignment: Alignment.centerLeft,
                   child: InkWell(
                     borderRadius: BorderRadius.circular(20),
-                    onTap: () {}, // calendar tab switch handled by user tapping bottom nav
+                    onTap: onOpenCalendar,
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
                       decoration: BoxDecoration(
                         color: palette.cyan,
                         borderRadius: BorderRadius.circular(20),
+                        boxShadow: palette.glow(palette.cyan, strength: 0.6),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -77,7 +93,7 @@ class HomeScreen extends StatelessWidget {
                           const SizedBox(width: 6),
                           Text(monthLabel,
                               style: TextStyle(
-                                  fontSize: 12, color: palette.bg, fontWeight: FontWeight.bold)),
+                                  fontSize: 12, color: onColor(palette.cyan), fontWeight: FontWeight.bold)),
                         ],
                       ),
                     ),
@@ -116,6 +132,7 @@ class HomeScreen extends StatelessWidget {
                     ('filter_fam', 'family'),
                     ('filter_fri', 'friend'),
                     ('filter_wor', 'work'),
+                    ('filter_special', 'special'),
                   ].map((pair) {
                     final (key, value) = pair;
                     final active = state.relationFilter == value;
@@ -129,6 +146,8 @@ class HomeScreen extends StatelessWidget {
                           decoration: BoxDecoration(
                             color: active ? palette.cyandim : palette.bg3,
                             borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: active ? palette.cyan : palette.border),
+                            boxShadow: active ? palette.glow(palette.cyan, strength: 0.4) : null,
                           ),
                           child: Text(t(lang, key),
                               style: TextStyle(

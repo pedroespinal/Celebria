@@ -12,6 +12,9 @@ class Contact {
   final String relation; // family | friend | work | other
   final String photo; // absolute file path, '' if none
   final String giftNote;
+  /// birthday | anniversary | other  (column added in v1.10.0; rows from
+  /// older versions get the column default 'birthday').
+  final String kind;
 
   const Contact({
     required this.id,
@@ -25,7 +28,10 @@ class Contact {
     this.relation = 'friend',
     this.photo = '',
     this.giftNote = '',
+    this.kind = 'birthday',
   });
+
+  bool get isBirthday => kind == 'birthday';
 
   factory Contact.fromMap(Map<String, Object?> m) => Contact(
         id: m['id'] as int,
@@ -39,6 +45,7 @@ class Contact {
         relation: m['relation'] as String? ?? 'friend',
         photo: m['photo'] as String? ?? '',
         giftNote: m['gift_note'] as String? ?? '',
+        kind: normalizeKind(m['kind'] as String?),
       );
 
   Map<String, Object?> toMap({bool includeId = true}) => {
@@ -53,6 +60,7 @@ class Contact {
         'relation': relation,
         'photo': photo,
         'gift_note': giftNote,
+        'kind': kind,
       };
 
   Contact copyWith({
@@ -67,6 +75,7 @@ class Contact {
     String? relation,
     String? photo,
     String? giftNote,
+    String? kind,
   }) =>
       Contact(
         id: id,
@@ -80,5 +89,16 @@ class Contact {
         relation: relation ?? this.relation,
         photo: photo ?? this.photo,
         giftNote: giftNote ?? this.giftNote,
+        kind: kind ?? this.kind,
       );
 }
+
+const List<String> contactKinds = ['birthday', 'anniversary', 'other'];
+
+String normalizeKind(String? k) => contactKinds.contains(k) ? k! : 'birthday';
+
+String kindIcon(String kind) => switch (kind) {
+      'anniversary' => '💍',
+      'other' => '⭐',
+      _ => '🎂',
+    };

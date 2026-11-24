@@ -7,6 +7,8 @@ import 'core/palette.dart';
 import 'data/db.dart';
 import 'notification_helper.dart';
 import 'screens/birthday_screen.dart';
+import 'screens/detail_screen.dart';
+import 'services/backup_service.dart';
 import 'services/update_checker.dart';
 import 'state/app_state.dart';
 import 'widgets/app_shell.dart';
@@ -70,13 +72,12 @@ class CelebriaApp extends StatelessWidget {
               home: Scaffold(body: Center(child: CircularProgressIndicator())),
             );
           }
-          final palette = state.theme == 'dark' ? darkPalette : lightPalette;
+          final palette = state.palette;
           return MaterialApp(
             navigatorKey: navigatorKey,
             title: 'Celebria',
             debugShowCheckedModeBanner: false,
-            theme: buildThemeData(
-                palette, state.theme == 'dark' ? Brightness.dark : Brightness.light),
+            theme: buildThemeData(palette),
             home: _AppRoot(state: state),
           );
         },
@@ -107,7 +108,38 @@ class _AppRootState extends State<_AppRoot> {
     }
   }
 
+  /// Tapped notification → open that contact's detail screen.
+  String? _lastPayload;
+  DateTime _lastPayloadAt = DateTime(2000);
+
+  void _openPayload(String payload) {
+    if (!payload.startsWith('contact:')) return;
+    // The same tap can arrive twice (tap callback + launch details).
+    final now = DateTime.now();
+    if (payload == _lastPayload && now.difference(_lastPayloadAt).inSeconds < 5) return;
+    _lastPayload = payload;
+    _lastPayloadAt = now;
+    final id = int.tryParse(payload.substring(8));
+    if (id == null || !widget.state.contacts.any((c) => c.id == id)) return;
+    navigatorKey.currentState?.push(
+      MaterialPageRoute(builder: (_) => DetailScreen(contactId: id)),
+    );
+  }
+
   Future<void> _maybeShowBirthday() async {
+    NotificationHelper.onTap = _openPayload;
+    // Weekly backup to Downloads/Celebria (no-op unless 7+ days old).
+    BackupService.maybeRun();
+
+    // App cold-started by tapping a reminder: go straight to that contact.
+    final launch = await NotificationHelper.launchPayload();
+    if (launch != null && launch.startsWith('contact:')) {
+      if (!mounted) return;
+      _openPayload(launch);
+      _checkUpdate();
+      return;
+    }
+
     final db = AppDb.instance;
     final showPopup = await db.getSetting('show_popup', '1') == '1';
     if (!showPopup) {
@@ -138,7 +170,7 @@ class _AppRootState extends State<_AppRoot> {
   }
 
   void _checkUpdate() {
-    final palette = widget.state.theme == 'dark' ? darkPalette : lightPalette;
+    final palette = widget.state.palette;
     UpdateChecker.check(context, widget.state.lang, palette);
   }
 

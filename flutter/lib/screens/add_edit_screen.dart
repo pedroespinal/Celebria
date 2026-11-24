@@ -2,6 +2,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../core/date_utils.dart';
 import '../core/i18n.dart';
 import '../core/palette.dart';
 import '../data/db.dart';
@@ -34,6 +35,7 @@ class _AddEditScreenState extends State<AddEditScreen> {
   int? _month;
   int? _year;
   String _relation = 'friend';
+  String _kind = 'birthday';
   String _photo = '';
   String _error = '';
   bool _confirmingDelete = false;
@@ -54,6 +56,7 @@ class _AddEditScreenState extends State<AddEditScreen> {
       _month = c.month;
       _year = c.year;
       _relation = c.relation;
+      _kind = c.kind;
       _photo = c.photo;
     }
   }
@@ -74,7 +77,12 @@ class _AddEditScreenState extends State<AddEditScreen> {
     final path = result.files.single.path;
     if (path == null) return;
     final dest = await AppDb.instance.copyPhoto(path);
-    setState(() => _photo = dest);
+    if (!mounted) return;
+    // Picking twice without saving: drop the unsaved intermediate copy.
+    if (_photo != (widget.existing?.photo ?? '')) {
+      await AppDb.instance.deleteOwnedPhoto(_photo);
+    }
+    if (mounted) setState(() => _photo = dest);
   }
 
   void _removePhoto() => setState(() => _photo = '');
@@ -87,6 +95,12 @@ class _AddEditScreenState extends State<AddEditScreen> {
     }
     if (_day == null || _month == null) {
       setState(() => _error = t(lang, 'err_date'));
+      return;
+    }
+    // e.g. 31 April / 30 February used to save fine and then showed up on
+    // the wrong day (clamped) in the list, calendar and notifications.
+    if (!isValidBirthday(_day!, _month!)) {
+      setState(() => _error = t(lang, 'err_date_invalid'));
       return;
     }
 
@@ -103,8 +117,13 @@ class _AddEditScreenState extends State<AddEditScreen> {
         relation: _relation,
         photo: _photo,
         giftNote: _giftCtrl.text.trim(),
+        kind: _kind,
       );
       await AppDb.instance.updateContact(updated);
+      // Photo replaced or removed → delete the old copy we made.
+      if (widget.existing!.photo != _photo) {
+        await AppDb.instance.deleteOwnedPhoto(widget.existing!.photo);
+      }
     } else {
       await AppDb.instance.addContact(Contact(
         id: 0,
@@ -118,6 +137,7 @@ class _AddEditScreenState extends State<AddEditScreen> {
         relation: _relation,
         photo: _photo,
         giftNote: _giftCtrl.text.trim(),
+        kind: _kind,
       ));
     }
 
@@ -149,6 +169,7 @@ class _AddEditScreenState extends State<AddEditScreen> {
       _month = null;
       _year = null;
       _relation = 'friend';
+      _kind = 'birthday';
       _photo = '';
       _error = '';
     });
@@ -156,6 +177,7 @@ class _AddEditScreenState extends State<AddEditScreen> {
 
   Future<void> _delete(AppState state) async {
     await AppDb.instance.deleteContact(widget.existing!.id);
+    await AppDb.instance.deleteOwnedPhoto(widget.existing!.photo);
     await state.reloadContacts();
     NotificationHelper.scheduleFromDB();
     widget.onDone();
@@ -183,7 +205,7 @@ class _AddEditScreenState extends State<AddEditScreen> {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
-    final p = state.theme == 'dark' ? darkPalette : lightPalette;
+    final p = state.palette;
     final lang = state.lang;
     final currentYear = DateTime.now().year;
 
@@ -192,11 +214,24 @@ class _AddEditScreenState extends State<AddEditScreen> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
         children: [
+          _fieldLabel(t(lang, 'field_kind'), p),
+          Row(children: [
+            for (final k in contactKinds)
+              OptionButton(
+                label: t(lang, 'kind_$k'),
+                active: _kind == k,
+                palette: p,
+                margin: const EdgeInsets.only(right: 4),
+                onTap: () => setState(() => _kind = k),
+              ),
+          ]),
+          const SizedBox(height: 10),
           _fieldLabel(t(lang, 'field_name'), p),
           TextField(
             controller: _nameCtrl,
             style: TextStyle(color: p.t1),
-            decoration: _dec(p, t(lang, 'field_name')),
+            decoration: _dec(
+                p, _kind == 'birthday' ? t(lang, 'field_name') : t(lang, 'kind_hint_$_kind')),
           ),
           const SizedBox(height: 10),
           Row(

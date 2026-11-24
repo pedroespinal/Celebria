@@ -5,6 +5,7 @@ import '../core/date_utils.dart';
 import '../core/i18n.dart';
 import '../core/palette.dart';
 import '../models/contact.dart';
+import 'wish_sheet.dart' show yearsLabelKey;
 import 'avatar.dart';
 
 /// One row in the contact list — avatar, name + date, days-left badge.
@@ -31,9 +32,10 @@ class ContactCard extends StatelessWidget {
     final age = calcAge(c.day, c.month, c.year);
     final relColor = palette.byKey(relColorKey[c.relation] ?? 't2');
 
-    final thisYear = DateTime.now().year;
-    final ageThisYear = c.year != null ? thisYear - c.year! : null;
-    final isMilestone = ageThisYear != null && milestoneAges.contains(ageThisYear);
+    // Age they turn at the NEXT birthday — a milestone already celebrated
+    // earlier this year must not stay highlighted until December 31.
+    final nextAge = ageOnNextBirthday(c.day, c.month, c.year);
+    final isMilestone = c.isBirthday && nextAge != null && milestoneAges.contains(nextAge);
 
     Color accent;
     double borderWidth;
@@ -66,11 +68,18 @@ class ContactCard extends StatelessWidget {
     }
     if (isMilestone) badgeText = '$badgeText\n✨';
 
-    var dateStr = '${c.day} ${monthName(lang, c.month)}';
+    var dateStr = '${kindIcon(c.kind)} ${c.day} ${monthName(lang, c.month)}';
     if (c.year != null) dateStr += ' ${c.year}';
-    if (age != null) dateStr += '  •  $age ${t(lang, 'years')}';
+    if (age != null) dateStr += '  •  $age ${t(lang, yearsLabelKey(c.kind))}';
 
-    return Material(
+    // Neon halo AROUND today's / milestone cards (dark mode only). It must
+    // wrap the Material: a shadow inside it tints the card's own fill.
+    final halo = (dLeft == 0 || isMilestone)
+        ? palette.glow(accent, strength: dLeft == 0 ? 0.8 : 0.45)
+        : const <BoxShadow>[];
+    return DecoratedBox(
+      decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), boxShadow: halo),
+      child: Material(
       color: palette.card,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
@@ -91,6 +100,7 @@ class ContactCard extends StatelessWidget {
                 relation: c.relation,
                 palette: palette,
                 size: 44,
+                celebrating: dLeft == 0,
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -121,6 +131,7 @@ class ContactCard extends StatelessWidget {
           ),
         ),
       ),
+    ),
     );
   }
 }

@@ -22,7 +22,7 @@ class BirthdayWidget : AppWidgetProvider() {
 
     companion object {
 
-        /** Called from MainActivity (Flutter) each time the app opens. */
+        /** Called from MainActivity's "com.flet.celebria/widget" channel after every reschedule. */
         fun updateAllWidgets(context: Context) {
             val manager = AppWidgetManager.getInstance(context) ?: return
             val ids = manager.getAppWidgetIds(
@@ -92,10 +92,15 @@ class BirthdayWidget : AppWidgetProvider() {
                 langCur.close()
 
                 // Scan contacts
-                val cur = db.query(
-                    "contacts", arrayOf("name", "day", "month", "year"),
-                    null, null, null, null, null
-                )
+                // "kind" exists from v1.10 on (added by AppDb.onOpen); fall back
+                // to the old columns if the app hasn't been opened since updating.
+                val cur = try {
+                    db.query("contacts", arrayOf("name", "day", "month", "year", "kind"),
+                        null, null, null, null, null)
+                } catch (_: Exception) {
+                    db.query("contacts", arrayOf("name", "day", "month", "year"),
+                        null, null, null, null, null)
+                }
 
                 val today   = Calendar.getInstance()
                 var minDays = Int.MAX_VALUE
@@ -113,7 +118,15 @@ class BirthdayWidget : AppWidgetProvider() {
                         minDays = days
 
                         val age = if (birthYear > 0) nextYear - birthYear else null
-                        val nameLabel = "🎂 $name" + (if (age != null) " ($age)" else "")
+                        val kind = (if (cur.columnCount > 4) cur.getString(4) else null) ?: "birthday"
+                        val icon = when (kind) { "anniversary" -> "💍"; "other" -> "⭐"; else -> "🎂" }
+                        val ageLabel = when {
+                            age == null || age <= 0 -> ""
+                            kind == "birthday" -> if (lang == "es") "\nCumple $age años" else "\nTurns $age"
+                            kind == "anniversary" -> if (lang == "es") "\n$age años juntos" else "\n$age years together"
+                            else -> if (lang == "es") "\n$age años" else "\n$age years"
+                        }
+                        val nameLabel = "$icon $name$ageLabel"
                         val dateLabel = String.format("%02d/%02d", day, month)
                         val daysLabel = when (days) {
                             0    -> if (lang == "es") "¡Hoy! 🎉"       else "Today! 🎉"
@@ -129,6 +142,7 @@ class BirthdayWidget : AppWidgetProvider() {
             } catch (_: Exception) { null }
         }
 
+
         /** Returns (daysUntilNextOccurrence, yearOfNextOccurrence). */
         private fun daysUntil(today: Calendar, day: Int, month: Int): Pair<Int, Int> {
             val todayYear = today.get(Calendar.YEAR)
@@ -138,13 +152,21 @@ class BirthdayWidget : AppWidgetProvider() {
             }
             for (offset in 0..1) {
                 try {
+                    // Same rule as Dart's birthdayInYear(): a day that doesn't
+                    // exist that year (Feb 29 in a common year) is clamped to
+                    // the month's last day. Calendar is lenient and would
+                    // otherwise silently roll Feb 29 over to Mar 1.
                     val bday = Calendar.getInstance().also {
-                        it.set(todayYear + offset, month - 1, day, 0, 0, 0)
-                        it.set(Calendar.MILLISECOND, 0)
+                        it.clear()
+                        it.set(todayYear + offset, month - 1, 1, 0, 0, 0)
+                        val last = it.getActualMaximum(Calendar.DAY_OF_MONTH)
+                        it.set(Calendar.DAY_OF_MONTH, if (day > last) last else day)
                     }
-                    val diff = ((bday.timeInMillis - todayClean.timeInMillis) / 86_400_000L).toInt()
+                    // Math.round, not truncation: across a DST change the gap
+                    // between two local midnights is 23h or 25h.
+                    val diff = Math.round((bday.timeInMillis - todayClean.timeInMillis) / 86_400_000.0).toInt()
                     if (diff >= 0) return Pair(diff, todayYear + offset)
-                } catch (_: Exception) { /* Feb 29 in non-leap year */ }
+                } catch (_: Exception) { }
             }
             return Pair(Int.MAX_VALUE, todayYear + 1)
         }

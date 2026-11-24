@@ -8,6 +8,11 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- Alarmas exactas (Android 12+) — notificaciones a la hora exacta en Doze -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <!-- Android 13+: permiso de alarma exacta concedido automaticamente a apps de
+         recordatorios/calendario. Sin esto, en Android 14+ SCHEDULE_EXACT_ALARM viene
+         DENEGADO por defecto en instalaciones nuevas y los avisos llegaban tarde
+         (modo inexacto) hasta que el usuario lo activaba a mano. -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
 
     <application
         android:label="Celebria"

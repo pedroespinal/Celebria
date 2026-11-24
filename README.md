@@ -5,7 +5,7 @@
 Celebria es una app Android personal para nunca olvidar un cumpleaños.  
 Paleta Fiesta (teal + coral + dorado), dark y light mode, bilingüe ES/EN, sin publicidad y sin conexión requerida para su uso principal.
 
-[![Versión](https://img.shields.io/badge/versión-1.10.0-ff6b6b?style=flat-square)](https://github.com/pedroespinal/Celebria/releases/latest)
+[![Versión](https://img.shields.io/badge/versión-1.10.1-ff6b6b?style=flat-square)](https://github.com/pedroespinal/Celebria/releases/latest)
 [![Plataforma](https://img.shields.io/badge/plataforma-Android-6bcb77?style=flat-square)](https://github.com/pedroespinal/Celebria/releases/latest)
 [![Flutter](https://img.shields.io/badge/Flutter-Dart-ffd93d?style=flat-square)](https://flutter.dev/)
 
@@ -280,6 +280,15 @@ No requiere recompilar la app.
 - **`version.json` debe ir SIN BOM.** `[Text.Encoding]::UTF8` de PowerShell agrega `EF BB BF` y el `jsonDecode` de Dart lo rechaza: hasta el 2026-11-23 el aviso de actualización fallaba en silencio en todas las versiones. `release.ps1` ya usa `UTF8Encoding($false)` y `UpdateChecker` quita el BOM (desde la versión siguiente a 1.10.0)
 - "Forzar detención" borra todas las alarmas de la app: para probar notificaciones cierra la app con `am kill`, no con `am force-stop`
 - Exportar JSON usa `FilePicker.platform.saveFile(bytes:)`; importar usa `pickFiles(withData: true)`
+
+---
+
+## 🆕 Novedades v1.10.1 (2026-11-23)
+
+- **Aviso de actualización confiable:** `UpdateChecker` ignora un BOM (`U+FEFF`) al inicio de `version.json`. Antes, un `version.json` guardado con BOM hacía fallar el `jsonDecode` en silencio y la app nunca mostraba "Nueva versión disponible". (El `version.json` publicado ya se corrigió sin BOM, lo que arregla también las versiones instaladas anteriores.)
+- `release.ps1`: guarda `version.json` sin BOM y exige que la versión nueva sea mayor que la **última publicada** (`version.json` → `latest`), no que la del código — así se puede subir la versión en cada cambio importante sin bloquear la publicación.
+- Guía de usuario: sección "¿Qué versión tengo?" en "Cómo actualizar la app" (ES/EN).
+- 29 pruebas unitarias.
 
 ---
 

@@ -5,7 +5,7 @@
 Celebria es una app Android personal para nunca olvidar un cumpleaños.  
 Paleta Fiesta (teal + coral + dorado), dark y light mode, bilingüe ES/EN, sin publicidad y sin conexión requerida para su uso principal.
 
-[![Versión](https://img.shields.io/badge/versión-1.10.1-ff6b6b?style=flat-square)](https://github.com/pedroespinal/Celebria/releases/latest)
+[![Versión](https://img.shields.io/badge/versión-1.10.2-ff6b6b?style=flat-square)](https://github.com/pedroespinal/Celebria/releases/latest)
 [![Plataforma](https://img.shields.io/badge/plataforma-Android-6bcb77?style=flat-square)](https://github.com/pedroespinal/Celebria/releases/latest)
 [![Flutter](https://img.shields.io/badge/Flutter-Dart-ffd93d?style=flat-square)](https://flutter.dev/)
 
@@ -200,7 +200,9 @@ Un solo paso — ya no hay empaquetado de Python ni build de dos fases.
 $env:PATH = "C:\Users\D0nGibaFok\flutter\3.41.7\bin;" + $env:PATH
 Set-Location "C:\Celebria\flutter"
 flutter build apk --release
-# APK en: flutter\build\app\outputs\flutter-apk\app-release.apk
+# APK en: flutter\build\app\outputs\flutter-apk\CelebriaV<version>.apk
+#   (copia con la versión en el nombre, hecha por build.gradle.kts; app-release.apk
+#    sigue existiendo porque Flutter lo busca con ese nombre exacto)
 
 # Pruebas unitarias (fechas, parser .vcf, plan de notificaciones):
 flutter test
@@ -239,7 +241,7 @@ La app lee `version.json` al arrancar para verificar si hay una versión nueva:
 {
   "latest":       "1.7.1",
   "minimum":      "1.0.0",
-  "download_url": "https://github.com/pedroespinal/Celebria/releases/download/v1.7.1/Celebria-v1.7.1.apk"
+  "download_url": "https://github.com/pedroespinal/Celebria/releases/download/v1.10.2/CelebriaV1.10.2.apk"
 }
 ```
 
@@ -280,6 +282,13 @@ No requiere recompilar la app.
 - **`version.json` debe ir SIN BOM.** `[Text.Encoding]::UTF8` de PowerShell agrega `EF BB BF` y el `jsonDecode` de Dart lo rechaza: hasta el 2026-11-23 el aviso de actualización fallaba en silencio en todas las versiones. `release.ps1` ya usa `UTF8Encoding($false)` y `UpdateChecker` quita el BOM (desde la versión siguiente a 1.10.0)
 - "Forzar detención" borra todas las alarmas de la app: para probar notificaciones cierra la app con `am kill`, no con `am force-stop`
 - Exportar JSON usa `FilePicker.platform.saveFile(bytes:)`; importar usa `pickFiles(withData: true)`
+
+---
+
+## 🆕 Novedades v1.10.2 (2026-11-23)
+
+- **El APK siempre lleva la versión en el nombre:** `CelebriaV1.10.2.apk`. Mismo nombre en la compilación local (`flutter/build/app/outputs/flutter-apk/` — copia automática de `build.gradle.kts` tras `assembleRelease`), en `build/apk/` de `release.ps1`, en el archivo del release de GitHub y en `download_url` de `version.json`. Antes salía `app-release.apk` (sin versión) y los nombres no coincidían (`Celebria-1.10.1.apk` local vs `Celebria-v1.10.1.apk` en GitHub)
+- Guía de usuario: el paso de descarga muestra el nombre nuevo del archivo (ES/EN)
 
 ---
 
